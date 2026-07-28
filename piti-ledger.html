@@ -229,6 +229,7 @@
       <div class="field"><label>房产税率 %/年</label><input type="number" id="a-tax" value="0.65" step="0.01"></div>
       <div class="field"><label>保险 %/年（按房价）</label><input type="number" id="a-ins" value="0.35" step="0.01"></div>
       <div class="field"><label>HOA 月费 $</label><input type="number" id="a-hoa" value="0" step="5"></div>
+      <div class="field"><label>RentCast API Key</label><input type="password" id="a-rentcast-key" placeholder="用于 Zillow 链接自动填充" autocomplete="off"></div>
     </div>
   </details>
 
@@ -247,8 +248,31 @@
 <script>
 (function(){
   const $ = (id)=>document.getElementById(id);
+  // Zillow Observed Rent Index (ZORI), All Homes Plus Multifamily, smoothed, $/month.
+  // Free public research data (files.zillowstatic.com), not scraped listings.
+  // Source: https://www.zillow.com/research/data/ -> Rentals -> ZIP Codes. Snapshot 2026-06-30.
+  const ZORI_ASOF = '2026-06-30';
+  const ZORI_BASELINE = {
+    '85201':1326,'85202':1393,'85203':1353,'85204':1430,'85205':1753,'85206':1626,'85207':2267,'85208':1943,'85209':1775,'85210':1453,'85212':2204,'85213':1669,'85215':2345,
+    '85003':1725,'85004':1616,'85006':1501,'85007':1375,'85008':1418,'85009':1182,'85012':1553,'85013':1516,'85014':1439,'85015':1247,'85016':1698,'85017':1215,'85018':1616,'85019':1441,'85020':1430,'85021':1220,'85022':1384,'85023':1308,'85024':1847,'85027':1449,'85028':2566,'85029':1234,'85031':1025,'85032':1639,'85033':1403,'85034':1392,'85035':1354,'85037':1736,'85040':1802,'85041':2207,'85042':1691,'85043':1970,'85044':1540,'85045':2901,'85048':1822,'85050':2574,'85051':1275,'85053':1252,'85054':1957,'85083':2693,'85085':1732,'85310':2274,'85339':2133,
+    '85281':1687,'85282':1584,'85283':1569,'85284':2769,'85288':1872
+  };
+  // Bedroom-count multiplier relative to a 2-bed unit. Derived from 6 Rentometer
+  // Pro reports (paid, user-supplied): Mesa 85201 x2, Mesa 85203, Tempe 85281,
+  // Tempe 85283, Phoenix 85008 — averaging each report's 1/3/4-bed median rent
+  // against its own 2-bed median. Consistent within ~10-15% across all three
+  // cities, so applied as one city-wide curve rather than per-city tables.
+  // ZORI_BASELINE below is treated as a ~2-bed-equivalent typical-unit anchor.
+  const ZORI_BED_MULTIPLIER = {1:0.81, 2:1.00, 3:1.48, 4:1.75};
+  // House vs apartment, holding bed count constant: comparing same-bed-count house
+  // vs apartment comps across all 6 reports showed only ~1-4% difference — most of
+  // the "house costs more" effect is actually the bed-count effect above, already
+  // captured by ZORI_BED_MULTIPLIER. This is a small residual, not a blanket premium.
+  const ZORI_HOUSE_PREMIUM = 1.03;
+  // Heuristic, not data-backed: extra bathrooms beyond 1 nudge rent up a bit.
+  const ZORI_BATH_ADJUST_PER_EXTRA = 0.04;
   let properties = [];
-  let assumptions = {down:20, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0};
+  let assumptions = {down:20, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:''};
   let editingId = null;
 
   function toast(msg){
@@ -262,22 +286,22 @@
   // ---------- persistence ----------
   async function loadAll(){
     try{
-      const a = await window.storage.get('assumptions', false);
-      if(a && a.value) assumptions = JSON.parse(a.value);
+      const a = localStorage.getItem('piti-assumptions');
+      if(a) assumptions = JSON.parse(a);
     }catch(e){ /* not set yet */ }
     try{
-      const p = await window.storage.get('properties', false);
-      if(p && p.value) properties = JSON.parse(p.value);
+      const p = localStorage.getItem('piti-properties');
+      if(p) properties = JSON.parse(p);
     }catch(e){ /* not set yet */ }
     hydrateAssumptionFields();
     render();
   }
   async function saveAssumptions(){
-    try{ await window.storage.set('assumptions', JSON.stringify(assumptions), false); }
+    try{ localStorage.setItem('piti-assumptions', JSON.stringify(assumptions)); }
     catch(e){ console.error(e); toast('假设参数保存失败'); }
   }
   async function saveProperties(){
-    try{ await window.storage.set('properties', JSON.stringify(properties), false); }
+    try{ localStorage.setItem('piti-properties', JSON.stringify(properties)); }
     catch(e){ console.error(e); toast('保存失败，请重试'); }
   }
   function hydrateAssumptionFields(){
@@ -287,16 +311,98 @@
     $('a-tax').value = assumptions.tax;
     $('a-ins').value = assumptions.ins;
     $('a-hoa').value = assumptions.hoa;
+    $('a-rentcast-key').value = assumptions.rentcastKey || '';
   }
-  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa'].forEach(id=>{
+  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-rentcast-key'].forEach(id=>{
     $(id).addEventListener('change', ()=>{
       assumptions = {
         down:+$('a-down').value, rate:+$('a-rate').value, term:+$('a-term').value,
-        tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value
+        tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value,
+        rentcastKey:$('a-rentcast-key').value.trim()
       };
       saveAssumptions();
     });
   });
+
+  // ---------- Zillow link -> RentCast auto-fill ----------
+  const ZILLOW_CITIES = ['Mesa','Tempe','Phoenix'];
+  function parseZillowAddress(url){
+    const m = url.match(/\/homedetails\/([^\/]+)\/\d+_zpid/i);
+    if(!m) return null;
+    const slug = decodeURIComponent(m[1]);
+    const zipMatch = slug.match(/(\d{5})$/);
+    const zip = zipMatch ? zipMatch[1] : '';
+    let cityFound = null, streetPart = slug;
+    for(const city of ZILLOW_CITIES){
+      const re = new RegExp('-' + city + '-[A-Z]{2}-\\d{5}$', 'i');
+      const cm = slug.match(re);
+      if(cm){ cityFound = city; streetPart = slug.slice(0, cm.index); break; }
+    }
+    if(!cityFound) return null;
+    const street = streetPart.replace(/-/g, ' ').trim();
+    return {street, city: cityFound, zip};
+  }
+
+  async function rentcastGet(path, key){
+    const res = await fetch('https://api.rentcast.io' + path, { headers: { 'X-Api-Key': key, 'Accept': 'application/json' } });
+    if(!res.ok) throw new Error('RentCast ' + path + ' -> HTTP ' + res.status);
+    return res.json();
+  }
+
+  async function fetchRentCastData(street, city, zip, key){
+    const addressQuery = encodeURIComponent(`${street}, ${city}, AZ${zip ? ' ' + zip : ''}`);
+    const out = { street, city, zip, price:null, beds:null, baths:null, sqft:null, rent:null, comps:[] };
+
+    try{
+      const props = await rentcastGet(`/v1/properties?address=${addressQuery}`, key);
+      const rec = Array.isArray(props) ? props[0] : props;
+      if(rec){
+        out.beds = rec.bedrooms ?? out.beds;
+        out.baths = rec.bathrooms ?? out.baths;
+        out.sqft = rec.squareFootage ?? out.sqft;
+        out.price = rec.lastSalePrice ?? out.price;
+      }
+    }catch(e){ console.error('RentCast properties lookup failed', e); }
+
+    try{
+      const listings = await rentcastGet(`/v1/listings/sale?address=${addressQuery}`, key);
+      const listing = Array.isArray(listings) ? listings[0] : listings;
+      if(listing && listing.price) out.price = listing.price;
+    }catch(e){ console.error('RentCast sale listing lookup failed', e); }
+
+    try{
+      const avm = await rentcastGet(`/v1/avm/rent/long-term?address=${addressQuery}`, key);
+      if(avm){
+        out.rent = avm.rent ?? avm.rentEstimate ?? null;
+        const comparables = avm.comparables || avm.comps || [];
+        out.comps = comparables.map(c => c.price ?? c.rent).filter(v => typeof v === 'number').slice(0, 5);
+      }
+    }catch(e){ console.error('RentCast rent AVM lookup failed', e); }
+
+    return out;
+  }
+
+  function estimateZoriRent(zip, propType, beds, baths){
+    const base = ZORI_BASELINE[zip];
+    if(!base) return null;
+    let rent = base;
+    const bedKey = Math.min(4, Math.max(1, Math.round(beds) || 2));
+    rent *= ZORI_BED_MULTIPLIER[bedKey];
+    if(propType === 'house') rent *= ZORI_HOUSE_PREMIUM;
+    const extraBaths = Math.max(0, (baths || 1) - 1);
+    rent *= (1 + extraBaths * ZORI_BATH_ADJUST_PER_EXTRA);
+    return Math.round(rent);
+  }
+
+  function applyZoriFallback(zip){
+    const propType = $('f-proptype') ? $('f-proptype').value : 'house';
+    const beds = +$('f-beds').value || 2;
+    const baths = +$('f-baths').value || 1;
+    const rent = estimateZoriRent(zip, propType, beds, baths);
+    if(!rent) return false;
+    $('f-manual-rent').value = rent;
+    return true;
+  }
 
   // ---------- calculations ----------
   function calcPITI(p){
@@ -417,10 +523,13 @@
     if(!file) return;
     const resultBox = card.querySelector('.ai-result');
     resultBox.innerHTML = `<div class="ai-box"><span class="spinner"></span>正在分析装修状况…</div>`;
+    let thumbHtml = '';
 
     try{
       const base64 = await fileToBase64(file);
       const mediaType = file.type || 'image/jpeg';
+      thumbHtml = `<img class="thumb" src="data:${mediaType};base64,${base64}">`;
+      resultBox.innerHTML = thumbHtml + `<div class="ai-box"><span class="spinner"></span>正在分析装修状况…</div>`;
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method:'POST',
@@ -444,7 +553,7 @@
       const parsed = JSON.parse(clean);
 
       const tierLabel = {old:'老旧', updated:'一般/翻新中', new:'全新装修'}[parsed.tier] || parsed.tier;
-      resultBox.innerHTML = `
+      resultBox.innerHTML = thumbHtml + `
         <div class="ai-box">
           <span class="verdict">AI 判断：${tierLabel}（建议租金调整 ${parsed.suggested_adjust_pct>0?'+':''}${parsed.suggested_adjust_pct}%）</span>
           <p>${escapeHtml(parsed.reason||'')}</p>
@@ -458,7 +567,7 @@
       });
     }catch(err){
       console.error(err);
-      resultBox.innerHTML = `<div class="ai-box" style="border-color:var(--reject);"><span class="verdict" style="color:var(--reject);">分析失败</span><p>请重试，或手动在上方选择装修档位。</p></div>`;
+      resultBox.innerHTML = thumbHtml + `<div class="ai-box" style="border-color:var(--reject);"><span class="verdict" style="color:var(--reject);">分析失败</span><p>请重试，或手动在上方选择装修档位。</p></div>`;
     }
   }
   function fileToBase64(file){
@@ -474,7 +583,7 @@
   function openForm(existing){
     editingId = existing ? existing.id : null;
     const p = existing || {
-      id: uid(), address:'', city:'Mesa', price:300000,
+      id: uid(), address:'', city:'Mesa', zip:'', propType:'house', price:300000,
       down:assumptions.down, rate:assumptions.rate, term:assumptions.term,
       tax:assumptions.tax, ins:assumptions.ins, hoa:assumptions.hoa,
       comps:[null,null,null], manualRent:0, tier:'updated', rentAdjustPct:0,
@@ -486,6 +595,14 @@
       <div class="panel">
         <h3>${existing?'编辑房源':'新增房源'}</h3>
         ${existing?'':`
+        <div style="margin-bottom:16px; border:1px dashed var(--brass); border-radius:5px; padding:10px 12px; background:#FFFDF8;">
+          <button type="button" class="ghost small" id="btn-toggle-zillow">粘贴 Zillow 链接自动填充</button>
+          <div id="zillow-slot" style="display:none; margin-top:10px;">
+            <input id="f-zillow-url" style="width:100%; font-family:'IBM Plex Mono',monospace; font-size:12px;" placeholder="https://www.zillow.com/homedetails/...">
+            <button type="button" class="brass small" id="btn-do-zillow" style="margin-top:8px;">获取房源信息</button>
+            <div id="zillow-status" style="margin-top:8px; font-size:12px; color:var(--slate);"></div>
+          </div>
+        </div>
         <div style="margin-bottom:16px; border:1px dashed var(--brass); border-radius:5px; padding:10px 12px; background:#FFFDF8;">
           <button type="button" class="ghost small" id="btn-toggle-import">粘贴导入（把我在聊天里给你的数据块粘进来）</button>
           <div id="import-slot" style="display:none; margin-top:10px;">
@@ -500,6 +617,18 @@
               <option ${p.city==='Mesa'?'selected':''}>Mesa</option>
               <option ${p.city==='Tempe'?'selected':''}>Tempe</option>
               <option ${p.city==='Phoenix'?'selected':''}>Phoenix</option>
+            </select>
+          </div>
+          <div class="field"><label>邮编 ZIP</label>
+            <div style="display:flex; gap:6px;">
+              <input id="f-zip" value="${existing?escapeHtml(p.zip||''):''}" placeholder="85203" style="flex:1;">
+              <button type="button" class="ghost small" id="btn-zori-lookup" title="用 Zillow 公开 ZORI 区域租金数据估算（免费，非精确 comp）">查参考租金</button>
+            </div>
+          </div>
+          <div class="field"><label>类型（单层=House，双层=Apartment，单层multifamily=House）</label>
+            <select id="f-proptype">
+              <option value="house" ${(p.propType||'house')==='house'?'selected':''}>House</option>
+              <option value="apartment" ${p.propType==='apartment'?'selected':''}>Apartment</option>
             </select>
           </div>
           <div class="field"><label>售价 $</label><input type="number" id="f-price" value="${p.price}" step="1000"></div>
@@ -540,8 +669,52 @@
     (p.comps && p.comps.length ? p.comps : [null,null]).forEach(addCompRow);
     $('btn-add-comp').addEventListener('click', ()=>addCompRow(null));
     $('btn-cancel').addEventListener('click', ()=>{ slot.innerHTML=''; editingId=null; });
+    $('btn-zori-lookup').addEventListener('click', ()=>{
+      const zip = $('f-zip').value.trim();
+      if(!zip){ toast('请先填写邮编'); return; }
+      const found = applyZoriFallback(zip);
+      toast(found ? `已填入 Zillow 区域参考租金（截至 ${ZORI_ASOF}），仅供参考` : '没有该邮编的 Zillow 参考数据，请手动填写');
+    });
 
     if(!existing){
+      $('btn-toggle-zillow').addEventListener('click', ()=>{
+        const box = $('zillow-slot');
+        box.style.display = box.style.display==='none' ? 'block' : 'none';
+      });
+      $('btn-do-zillow').addEventListener('click', async ()=>{
+        const url = $('f-zillow-url').value.trim();
+        const statusBox = $('zillow-status');
+        const key = assumptions.rentcastKey;
+        const parsed = parseZillowAddress(url);
+        if(!parsed){ statusBox.textContent = '无法从链接中解析地址，请确认是 Mesa/Tempe/Phoenix 的 Zillow 房源链接，或直接手动填写下方表单'; return; }
+        $('f-address').value = parsed.street;
+        $('f-city').value = parsed.city;
+        if(parsed.zip) $('f-zip').value = parsed.zip;
+        statusBox.innerHTML = `<span class="spinner"></span>正在查询 ${escapeHtml(parsed.street)}, ${parsed.city}…`;
+        let data = { price:null, beds:null, baths:null, sqft:null, rent:null, comps:[] };
+        if(key){
+          try{ data = await fetchRentCastData(parsed.street, parsed.city, parsed.zip, key); }
+          catch(e){ console.error(e); }
+        }
+        if(data.price) $('f-price').value = data.price;
+        if(data.beds!=null) $('f-beds').value = data.beds;
+        if(data.baths!=null) $('f-baths').value = data.baths;
+        if(data.sqft!=null) $('f-sqft').value = data.sqft;
+        if(data.comps.length){
+          compRows.innerHTML = '';
+          data.comps.forEach(addCompRow);
+        } else if(data.rent){
+          $('f-manual-rent').value = data.rent;
+        } else {
+          applyZoriFallback(parsed.zip);
+        }
+        const missing = [];
+        if(!data.price) missing.push('售价（需手动填写或 RentCast Key）');
+        if(data.beds==null) missing.push('bed/bath/sqft');
+        statusBox.textContent = key
+          ? (missing.length ? `已填充部分信息，仍缺：${missing.join('、')}` : '已从 RentCast 填充，请核对后保存')
+          : '未填写 RentCast Key，售价/户型需手动填写；租金已用 Zillow 免费区域参考值(ZORI)填充，仅供参考';
+      });
       $('btn-toggle-import').addEventListener('click', ()=>{
         const box = $('import-slot');
         box.style.display = box.style.display==='none' ? 'block' : 'none';
@@ -570,7 +743,8 @@
       const comps = Array.from(compRows.querySelectorAll('input')).map(i=>+i.value).filter(v=>v>0);
       const np = {
         id:p.id, createdAt:p.createdAt,
-        address:$('f-address').value.trim(), city:$('f-city').value,
+        address:$('f-address').value.trim(), city:$('f-city').value, zip:$('f-zip').value.trim(),
+        propType:$('f-proptype').value,
         price:+$('f-price').value, down:+$('f-down').value, rate:+$('f-rate').value,
         term:+$('f-term').value, tax:+$('f-tax').value, ins:+$('f-ins').value, hoa:+$('f-hoa').value,
         beds:$('f-beds').value?+$('f-beds').value:'', baths:$('f-baths').value?+$('f-baths').value:'',
