@@ -421,7 +421,9 @@
     const comps = (p.comps||[]).filter(c=>c>0);
     const base = comps.length ? comps.reduce((a,b)=>a+b,0)/comps.length : (p.manualRent||0);
     const adj = base * (1 + (p.rentAdjustPct||0)/100);
-    return {base, adj};
+    const units = p.units || 1;
+    const total = adj * units;
+    return {base, adj, units, total};
   }
 
   // ---------- render list ----------
@@ -437,8 +439,8 @@
   function renderCard(p){
     const piti = calcPITI(p);
     const rent = estimateRent(p);
-    const threshold = rent.adj * 0.7;
-    const pass = threshold >= piti.total && rent.adj > 0;
+    const threshold = rent.total * 0.7;
+    const pass = threshold >= piti.total && rent.total > 0;
     const margin = threshold - piti.total;
 
     const card = document.createElement('div');
@@ -467,7 +469,7 @@
           <div class="rent-block">
             <h4>租金估算</h4>
             <div style="font-family:'IBM Plex Mono',monospace; font-size:13px;">
-              comps 均值 ${fmt(rent.base)} → 装修调整后 <b>${fmt(rent.adj)}</b>
+              comps 均值 ${fmt(rent.base)} → 装修调整后 <b>${fmt(rent.adj)}</b>${rent.units>1?`/unit × ${rent.units} units = <b>${fmt(rent.total)}</b>/mo`:''}
             </div>
             <div class="tier-pills" style="margin-top:8px;">
               <span class="pill ${p.tier==='old'?'active':''}" data-tier="old">老旧 −5%</span>
@@ -768,12 +770,13 @@
   $('btn-copy').addEventListener('click', ()=>{
     const passing = properties.filter(p=>{
       const piti = calcPITI(p); const rent = estimateRent(p);
-      return rent.adj*0.7 >= piti.total && rent.adj>0;
+      return rent.total*0.7 >= piti.total && rent.total>0;
     });
     if(!passing.length){ toast('目前没有达标房源'); return; }
     const lines = passing.map(p=>{
       const piti = calcPITI(p); const rent = estimateRent(p);
-      return `${p.address}, ${p.city} AZ | 售价 ${fmt(p.price)} | PITI ${fmt(piti.total)}/mo | 估算租金 ${fmt(rent.adj)}/mo | 净余 ${fmt(rent.adj*0.7-piti.total)}/mo`;
+      const rentStr = rent.units>1 ? `${fmt(rent.adj)}/unit x${rent.units}=${fmt(rent.total)}` : fmt(rent.total);
+      return `${p.address}, ${p.city} AZ | 售价 ${fmt(p.price)} | PITI ${fmt(piti.total)}/mo | 估算租金 ${rentStr}/mo | 净余 ${fmt(rent.total*0.7-piti.total)}/mo`;
     });
     const text = `达标投资房源（租金×0.7 ≥ PITI）\n\n` + lines.join('\n');
     navigator.clipboard.writeText(text).then(()=>toast('已复制到剪贴板，可粘贴发邮件')).catch(()=>toast('复制失败，请手动选取文本'));
