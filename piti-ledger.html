@@ -418,6 +418,16 @@
     return true;
   }
 
+  // ---------- Maricopa County Assessor lookup ----------
+  // Note: the Assessor site's actual data loads via an internal AJAX call tied to
+  // session state set up during full page load; it can't be queried directly via
+  // fetch (consistently returns 500 even same-origin). So instead of pretending to
+  // auto-fetch, this opens their search pre-filled so the number can be copied over
+  // in one click.
+  function assessorSearchUrl(street, city){
+    return `https://mcassessor.maricopa.gov/mcs/?q=${encodeURIComponent(street + ' ' + city)}`;
+  }
+
   // ---------- calculations ----------
   function calcPITI(p){
     const loan = p.price * (1 - p.down/100);
@@ -426,7 +436,8 @@
     let pi;
     if(r === 0) pi = loan/n;
     else pi = loan * r / (1 - Math.pow(1+r, -n));
-    const tax = p.price * p.tax/100 / 12;
+    const taxBase = p.assessedValue || p.price;
+    const tax = taxBase * p.tax/100 / 12;
     const ins = p.price * p.ins/100 / 12;
     const hoa = p.hoa || 0;
     return {pi, tax, ins, hoa, total: pi+tax+ins+hoa};
@@ -496,6 +507,7 @@
             <tr><td>HOA /月</td><td>${fmt(piti.hoa)}</td></tr>
             <tr class="total"><td>PITI 合计</td><td>${fmt(piti.total)}</td></tr>
           </table>
+          ${p.assessedValue ? `<div style="margin-top:8px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">${p.assessorInfo ? escapeHtml(p.assessorInfo) : `地税按评估值 ${fmt(p.assessedValue)} 计算`}</div>` : ''}
         </div>
         <div>
           <div class="rent-block">
@@ -660,7 +672,7 @@
   function openForm(existing){
     editingId = existing ? existing.id : null;
     const p = existing || {
-      id: uid(), address:'', city:'Mesa', zip:'', propType:'house', price:300000,
+      id: uid(), address:'', city:'Mesa', zip:'', propType:'house', assessedValue:0, assessorInfo:'', price:300000,
       down:assumptions.down, rate:assumptions.rate, term:assumptions.term,
       tax:assumptions.tax, ins:assumptions.ins, hoa:assumptions.hoa,
       comps:[null,null,null], manualRent:0, tier:'updated', rentAdjustPct:0,
@@ -716,9 +728,17 @@
           <div class="field"><label>首付 %</label><input type="number" id="f-down" value="${p.down}" step="1"></div>
           <div class="field"><label>年利率 %</label><input type="number" id="f-rate" value="${p.rate}" step="0.05"></div>
           <div class="field"><label>贷款年限</label><input type="number" id="f-term" value="${p.term}" step="1"></div>
-          <div class="field"><label>房产税 %/年</label><input type="number" id="f-tax" value="${p.tax}" step="0.01"></div>
+          <div class="field"><label>房产税 %/年（乘以下方评估值，若未查则乘售价）</label><input type="number" id="f-tax" value="${p.tax}" step="0.01"></div>
           <div class="field"><label>保险 %/年</label><input type="number" id="f-ins" value="${p.ins}" step="0.01"></div>
           <div class="field"><label>HOA 月费 $</label><input type="number" id="f-hoa" value="${p.hoa}" step="5"></div>
+          <div class="field full">
+            <label>Maricopa County 地税评估值（Assessed LPV，免费公开数据，需手动从官网复制）</label>
+            <div style="display:flex; gap:6px;">
+              <input type="number" id="f-assessed-value" value="${p.assessedValue||''}" placeholder="从 Assessor 详情页的 Assessed LPV 复制过来" style="flex:1;">
+              <button type="button" class="ghost small" id="btn-assessor-lookup">打开 Assessor 搜索</button>
+            </div>
+            <div id="assessor-status" style="margin-top:6px; font-size:12px; color:var(--slate);">${p.assessorInfo ? escapeHtml(p.assessorInfo) : ''}</div>
+          </div>
           <div class="field full"><label>备注（描述摘要 / 照片判断理由等）</label><textarea id="f-notes" rows="2">${existing?escapeHtml(p.notes||''):''}</textarea></div>
         </div>
         <div style="margin-top:16px;">
@@ -751,6 +771,14 @@
       if(!zip){ toast('请先填写邮编'); return; }
       const found = applyZoriFallback(zip);
       toast(found ? `已填入 Zillow 区域参考租金（截至 ${ZORI_ASOF}），仅供参考` : '没有该邮编的 Zillow 参考数据，请手动填写');
+    });
+    $('btn-assessor-lookup').addEventListener('click', ()=>{
+      const street = $('f-address').value.trim();
+      const city = $('f-city').value;
+      const statusBox = $('assessor-status');
+      if(!street){ toast('请先填写地址'); return; }
+      window.open(assessorSearchUrl(street, city), '_blank');
+      statusBox.textContent = '已在新标签页打开 Assessor 搜索 — 找到 Parcel 后点进详情页，把 "Assessed LPV" 数值填回左边输入框';
     });
 
     if(!existing){
@@ -822,6 +850,8 @@
         id:p.id, createdAt:p.createdAt,
         address:$('f-address').value.trim(), city:$('f-city').value, zip:$('f-zip').value.trim(),
         propType:$('f-proptype').value,
+        assessedValue:+$('f-assessed-value').value||0,
+        assessorInfo:$('assessor-status').dataset.info || (p.assessorInfo||''),
         price:+$('f-price').value, down:+$('f-down').value, rate:+$('f-rate').value,
         term:+$('f-term').value, tax:+$('f-tax').value, ins:+$('f-ins').value, hoa:+$('f-hoa').value,
         beds:$('f-beds').value?+$('f-beds').value:'', baths:$('f-baths').value?+$('f-baths').value:'',
