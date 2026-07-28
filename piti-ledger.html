@@ -417,10 +417,13 @@
     if(!file) return;
     const resultBox = card.querySelector('.ai-result');
     resultBox.innerHTML = `<div class="ai-box"><span class="spinner"></span>正在分析装修状况…</div>`;
+    let thumbHtml = '';
 
     try{
       const base64 = await fileToBase64(file);
       const mediaType = file.type || 'image/jpeg';
+      thumbHtml = `<img class="thumb" src="data:${mediaType};base64,${base64}">`;
+      resultBox.innerHTML = thumbHtml + `<div class="ai-box"><span class="spinner"></span>正在分析装修状况…</div>`;
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method:'POST',
@@ -444,7 +447,7 @@
       const parsed = JSON.parse(clean);
 
       const tierLabel = {old:'老旧', updated:'一般/翻新中', new:'全新装修'}[parsed.tier] || parsed.tier;
-      resultBox.innerHTML = `
+      resultBox.innerHTML = thumbHtml + `
         <div class="ai-box">
           <span class="verdict">AI 判断：${tierLabel}（建议租金调整 ${parsed.suggested_adjust_pct>0?'+':''}${parsed.suggested_adjust_pct}%）</span>
           <p>${escapeHtml(parsed.reason||'')}</p>
@@ -458,7 +461,7 @@
       });
     }catch(err){
       console.error(err);
-      resultBox.innerHTML = `<div class="ai-box" style="border-color:var(--reject);"><span class="verdict" style="color:var(--reject);">分析失败</span><p>请重试，或手动在上方选择装修档位。</p></div>`;
+      resultBox.innerHTML = thumbHtml + `<div class="ai-box" style="border-color:var(--reject);"><span class="verdict" style="color:var(--reject);">分析失败</span><p>请重试，或手动在上方选择装修档位。</p></div>`;
     }
   }
   function fileToBase64(file){
