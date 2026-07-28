@@ -230,6 +230,7 @@
       <div class="field"><label>保险 %/年（按房价）</label><input type="number" id="a-ins" value="0.35" step="0.01"></div>
       <div class="field"><label>HOA 月费 $</label><input type="number" id="a-hoa" value="0" step="5"></div>
       <div class="field"><label>RentCast API Key</label><input type="password" id="a-rentcast-key" placeholder="用于 Zillow 链接自动填充" autocomplete="off"></div>
+      <div class="field"><label>Anthropic API Key</label><input type="password" id="a-anthropic-key" placeholder="用于照片装修分析" autocomplete="off"></div>
     </div>
   </details>
 
@@ -272,7 +273,7 @@
   // Heuristic, not data-backed: extra bathrooms beyond 1 nudge rent up a bit.
   const ZORI_BATH_ADJUST_PER_EXTRA = 0.04;
   let properties = [];
-  let assumptions = {down:20, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:''};
+  let assumptions = {down:20, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:''};
   let editingId = null;
 
   function toast(msg){
@@ -312,13 +313,15 @@
     $('a-ins').value = assumptions.ins;
     $('a-hoa').value = assumptions.hoa;
     $('a-rentcast-key').value = assumptions.rentcastKey || '';
+    $('a-anthropic-key').value = assumptions.anthropicKey || '';
   }
-  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-rentcast-key'].forEach(id=>{
+  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-rentcast-key','a-anthropic-key'].forEach(id=>{
     $(id).addEventListener('change', ()=>{
       assumptions = {
         down:+$('a-down').value, rate:+$('a-rate').value, term:+$('a-term').value,
         tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value,
-        rentcastKey:$('a-rentcast-key').value.trim()
+        rentcastKey:$('a-rentcast-key').value.trim(),
+        anthropicKey:$('a-anthropic-key').value.trim()
       };
       saveAssumptions();
     });
@@ -524,6 +527,12 @@
     const file = e.target.files[0];
     if(!file) return;
     const resultBox = card.querySelector('.ai-result');
+    const anthropicKey = assumptions.anthropicKey;
+    if(!anthropicKey){
+      resultBox.innerHTML = `<div class="ai-box" style="border-color:var(--reject);"><span class="verdict" style="color:var(--reject);">未配置 API Key</span><p>请先在上方"默认假设参数"里填写 Anthropic API Key（从 console.anthropic.com 获取，与 Claude.ai 订阅是两回事）。</p></div>`;
+      e.target.value = '';
+      return;
+    }
     resultBox.innerHTML = `<div class="ai-box"><span class="spinner"></span>正在分析装修状况…</div>`;
     let thumbHtml = '';
 
@@ -535,7 +544,12 @@
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{
+          'Content-Type':'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
         body: JSON.stringify({
           model:'claude-sonnet-4-6',
           max_tokens:400,
@@ -549,6 +563,7 @@
         })
       });
       const data = await response.json();
+      if(!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
       const textBlock = (data.content||[]).find(b=>b.type==='text');
       if(!textBlock) throw new Error('no text in response');
       const clean = textBlock.text.replace(/```json|```/g,'').trim();
@@ -569,7 +584,7 @@
       });
     }catch(err){
       console.error(err);
-      resultBox.innerHTML = thumbHtml + `<div class="ai-box" style="border-color:var(--reject);"><span class="verdict" style="color:var(--reject);">分析失败</span><p>请重试，或手动在上方选择装修档位。</p></div>`;
+      resultBox.innerHTML = thumbHtml + `<div class="ai-box" style="border-color:var(--reject);"><span class="verdict" style="color:var(--reject);">分析失败</span><p>${escapeHtml(err.message || '请重试，或手动在上方选择装修档位。')}</p></div>`;
     }
   }
   function fileToBase64(file){
