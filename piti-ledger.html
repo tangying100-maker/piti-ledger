@@ -257,6 +257,14 @@
     '85003':1725,'85004':1616,'85006':1501,'85007':1375,'85008':1418,'85009':1182,'85012':1553,'85013':1516,'85014':1439,'85015':1247,'85016':1698,'85017':1215,'85018':1616,'85019':1441,'85020':1430,'85021':1220,'85022':1384,'85023':1308,'85024':1847,'85027':1449,'85028':2566,'85029':1234,'85031':1025,'85032':1639,'85033':1403,'85034':1392,'85035':1354,'85037':1736,'85040':1802,'85041':2207,'85042':1691,'85043':1970,'85044':1540,'85045':2901,'85048':1822,'85050':2574,'85051':1275,'85053':1252,'85054':1957,'85083':2693,'85085':1732,'85310':2274,'85339':2133,
     '85281':1687,'85282':1584,'85283':1569,'85284':2769,'85288':1872
   };
+  // House vs apartment: Zillow ZORI is a blended (all homes + multifamily) index.
+  // Single-family homes rent higher than the blend. Ratio from Zillow's own free
+  // Metro-level SFR-only ZORI ($2,320.97) vs blended ZORI ($1,733.46) for the
+  // Phoenix-Mesa-Chandler MSA, 2026-06-30. Applied city-wide (not per-ZIP —
+  // Zillow doesn't publish an SFR/MFR split at ZIP granularity).
+  const ZORI_HOUSE_PREMIUM = 2320.97 / 1733.46; // ~1.339
+  // Heuristic, not data-backed: extra bathrooms beyond 1 nudge rent up a bit.
+  const ZORI_BATH_ADJUST_PER_EXTRA = 0.04;
   let properties = [];
   let assumptions = {down:20, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:''};
   let editingId = null;
@@ -368,8 +376,20 @@
     return out;
   }
 
+  function estimateZoriRent(zip, propType, baths){
+    const base = ZORI_BASELINE[zip];
+    if(!base) return null;
+    let rent = base;
+    if(propType === 'house') rent *= ZORI_HOUSE_PREMIUM;
+    const extraBaths = Math.max(0, (baths || 1) - 1);
+    rent *= (1 + extraBaths * ZORI_BATH_ADJUST_PER_EXTRA);
+    return Math.round(rent);
+  }
+
   function applyZoriFallback(zip){
-    const rent = ZORI_BASELINE[zip];
+    const propType = $('f-proptype') ? $('f-proptype').value : 'house';
+    const baths = +$('f-baths').value || 1;
+    const rent = estimateZoriRent(zip, propType, baths);
     if(!rent) return false;
     $('f-manual-rent').value = rent;
     return true;
@@ -554,7 +574,7 @@
   function openForm(existing){
     editingId = existing ? existing.id : null;
     const p = existing || {
-      id: uid(), address:'', city:'Mesa', zip:'', price:300000,
+      id: uid(), address:'', city:'Mesa', zip:'', propType:'house', price:300000,
       down:assumptions.down, rate:assumptions.rate, term:assumptions.term,
       tax:assumptions.tax, ins:assumptions.ins, hoa:assumptions.hoa,
       comps:[null,null,null], manualRent:0, tier:'updated', rentAdjustPct:0,
@@ -595,6 +615,12 @@
               <input id="f-zip" value="${existing?escapeHtml(p.zip||''):''}" placeholder="85203" style="flex:1;">
               <button type="button" class="ghost small" id="btn-zori-lookup" title="用 Zillow 公开 ZORI 区域租金数据估算（免费，非精确 comp）">查参考租金</button>
             </div>
+          </div>
+          <div class="field"><label>类型（单层=House，双层=Apartment，单层multifamily=House）</label>
+            <select id="f-proptype">
+              <option value="house" ${(p.propType||'house')==='house'?'selected':''}>House</option>
+              <option value="apartment" ${p.propType==='apartment'?'selected':''}>Apartment</option>
+            </select>
           </div>
           <div class="field"><label>售价 $</label><input type="number" id="f-price" value="${p.price}" step="1000"></div>
           <div class="field"><label>Bedrooms</label><input type="number" id="f-beds" value="${p.beds}" step="1"></div>
@@ -709,6 +735,7 @@
       const np = {
         id:p.id, createdAt:p.createdAt,
         address:$('f-address').value.trim(), city:$('f-city').value, zip:$('f-zip').value.trim(),
+        propType:$('f-proptype').value,
         price:+$('f-price').value, down:+$('f-down').value, rate:+$('f-rate').value,
         term:+$('f-term').value, tax:+$('f-tax').value, ins:+$('f-ins').value, hoa:+$('f-hoa').value,
         beds:$('f-beds').value?+$('f-beds').value:'', baths:$('f-baths').value?+$('f-baths').value:'',
