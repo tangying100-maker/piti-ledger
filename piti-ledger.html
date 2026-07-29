@@ -424,6 +424,23 @@
     setTimeout(()=>t.classList.remove('show'), 2400);
   }
   function uid(){ return 'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8); }
+  // Zillow serves each real photo as several resolution/format variants
+  // sharing one base filename (e.g. ".../fp/<hash>-cc_ft_1536.jpg" and
+  // ".../fp/<hash>-cc_ft_576.webp" are the SAME photo). Collapse by that
+  // base filename and keep the variant with the largest size code so the
+  // gallery shows one entry per real photo, at its best available quality.
+  function dedupePhotoUrls(urls){
+    const sizeSuffix = u => { const m = u.split('?')[0].match(/-([a-zA-Z0-9_]+)\.(jpe?g|png|webp)$/i); return m ? m[1] : ''; };
+    const baseKey = u => u.split('?')[0].replace(/-[a-zA-Z0-9_]+\.(jpe?g|png|webp)$/i, '');
+    const sizeScore = u => { const n = sizeSuffix(u).match(/\d+/g); return n ? Math.max(...n.map(Number)) : 0; };
+    const bestByKey = new Map();
+    for(const u of urls){
+      const key = baseKey(u);
+      const prev = bestByKey.get(key);
+      if(!prev || sizeScore(u) > sizeScore(prev)) bestByKey.set(key, u);
+    }
+    return [...bestByKey.values()];
+  }
   function fmt(n){ return '$'+Math.round(n).toLocaleString('en-US'); }
   function fmt2(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
@@ -437,6 +454,20 @@
       const p = localStorage.getItem('piti-properties');
       if(p) properties = JSON.parse(p);
     }catch(e){ /* not set yet */ }
+    // One-time cleanup: properties saved before the photo-dedup fix can have
+    // duplicate resolution/format variants baked into their stored imageUrls.
+    // Re-run the same dedup here so already-saved listings get fixed too,
+    // without her having to re-paste and re-parse each one.
+    let photosChanged = false;
+    for(const prop of properties){
+      if(!prop.imageUrls || !prop.imageUrls.length) continue;
+      const deduped = dedupePhotoUrls(prop.imageUrls);
+      if(deduped.length !== prop.imageUrls.length){
+        prop.imageUrls = deduped;
+        photosChanged = true;
+      }
+    }
+    if(photosChanged) saveProperties();
     hydrateAssumptionFields();
     render();
   }
@@ -808,24 +839,7 @@
     }
 
     // Deduplicate (no cap — a listing can have 70+ photos and she wants all of them).
-    // Zillow serves each real photo as several resolution/crop variants sharing
-    // one base filename (e.g. ".../fp/<hash>-cc_ft_768.jpg" and
-    // ".../fp/<hash>-uncropped_scaled_within_1536_1152.jpg" are the SAME photo)
-    // — exact-string dedup treats those as different images, which is why the
-    // gallery looked full of near-identical duplicates. Collapse by base
-    // filename (strip the trailing "-<sizecode>" segment) and keep only the
-    // largest variant found for each real photo.
-    {
-      const baseKey = u => u.split('?')[0].replace(/-[a-zA-Z0-9_]+\.(jpe?g|png|webp)$/i, '');
-      const sizeScore = u => { const n = u.match(/\d+/g); return n ? Math.max(...n.map(Number)) : 0; };
-      const bestByKey = new Map();
-      for(const u of r.imageUrls){
-        const key = baseKey(u);
-        const prev = bestByKey.get(key);
-        if(!prev || sizeScore(u) > sizeScore(prev)) bestByKey.set(key, u);
-      }
-      r.imageUrls = [...bestByKey.values()];
-    }
+    r.imageUrls = dedupePhotoUrls(r.imageUrls);
     return r;
   }
 
