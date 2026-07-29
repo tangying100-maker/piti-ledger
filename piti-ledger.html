@@ -956,13 +956,17 @@
     return Math.round(rent);
   }
 
-  // Per-unit rent estimate for multifamily — always uses apartment multipliers.
-  function estimateUnitRent(zip, beds, baths){
+  // Per-unit rent estimate for multifamily. propType defaults to 'apartment'
+  // (most small multifamily units comp against apartment listings), but
+  // respects an explicit choice — a fourplex built house-style should be
+  // able to use the house curve instead, which differs by ~25%+ at the same
+  // bed count, not just at 3-4BR.
+  function estimateUnitRent(zip, beds, baths, propType){
     const base = ZORI_BASELINE[zip];
     if(!base) return null;
     let rent = base;
     const bedKey = Math.min(4, Math.max(1, Math.round(beds) || 2));
-    const mult = getBedMult(zip, 'apartment');
+    const mult = getBedMult(zip, propType || 'apartment');
     rent *= mult[bedKey] || mult[2];
     const extraBaths = Math.max(0, (baths || 1) - 1);
     rent *= (1 + extraBaths * ZORI_BATH_ADJUST_PER_EXTRA);
@@ -995,7 +999,7 @@
     if(unitLayouts.length && ($('f-units').value|0) > 1){
       let total = 0;
       for(const lu of unitLayouts){
-        const uRent = estimateUnitRent(zip, lu.beds||2, lu.baths||1);
+        const uRent = estimateUnitRent(zip, lu.beds||2, lu.baths||1, propType);
         if(uRent) total += uRent * (lu.count||1);
       }
       if(total){
@@ -1124,7 +1128,7 @@
         // A real, current rent (existing tenant) beats the ZIP/bed-count model
         // outright — no point estimating what's already known. Model estimate
         // still shown alongside for reference/comparison.
-        const perUnitBase = estimateUnitRent(zip, lu.beds||2, lu.baths||1) || 0;
+        const perUnitBase = estimateUnitRent(zip, lu.beds||2, lu.baths||1, p.propType) || 0;
         const adjustPct = lu.rentAdjustPct ?? p.rentAdjustPct ?? 0;
         const perUnitAdj = hasActual ? lu.actualRent : Math.round(perUnitBase * (1 + adjustPct/100));
         details.push({
@@ -1604,6 +1608,7 @@
     // on every relevant input change.
     function refreshUnitLayoutRents(){
       const zip = $('f-zip').value.trim();
+      const propType = $('f-proptype') ? $('f-proptype').value : 'apartment';
       const rows = document.querySelectorAll('#unit-layout-rows .unit-layout-row');
       let grandTotal = 0, anyRent = false;
       rows.forEach(row=>{
@@ -1615,7 +1620,7 @@
         const preview = row.querySelector('.ul-rent-preview');
         if(!preview) return;
         if(!count || (!beds && !baths)){ preview.textContent = ''; return; }
-        const base = estimateUnitRent(zip, beds||2, baths||1);
+        const base = estimateUnitRent(zip, beds||2, baths||1, propType);
         if(base == null){ preview.textContent = zip ? '无 ZIP 参考数据' : '请先填邮编'; return; }
         const hasActual = actualRent > 0;
         const perUnit = hasActual ? actualRent : Math.round(base * (1 + pct/100));
@@ -1704,6 +1709,13 @@
         if($('unit-layout-section').style.display === 'none'){
           showUnitLayoutEditor();
         }
+        // Multi-family units comp against apartment listings, not houses —
+        // default there rather than leaving the single-family 'house'
+        // default in place, unless she's deliberately picked a type herself.
+        if(!propTypeUserEdited && $('f-proptype').value !== 'apartment'){
+          $('f-proptype').value = 'apartment';
+          refreshUnitLayoutRents();
+        }
       } else {
         $('unit-layout-section').style.display = 'none';
       }
@@ -1727,8 +1739,9 @@
     // from before she finished typing.
     let manualRentUserEdited = false;
     $('f-manual-rent').addEventListener('input', ()=>{ manualRentUserEdited = true; });
+    let propTypeUserEdited = !!existing; // don't override an already-saved choice
     ['f-zip','f-beds','f-baths'].forEach(id => $(id).addEventListener('input', ()=>{ refreshSfhRentRef(); refreshUnitLayoutRents(); }));
-    $('f-proptype').addEventListener('change', refreshSfhRentRef);
+    $('f-proptype').addEventListener('change', ()=>{ propTypeUserEdited = true; refreshSfhRentRef(); refreshUnitLayoutRents(); });
     refreshSfhRentRef();
     $('btn-assessor-lookup').addEventListener('click', ()=>{
       const street = $('f-address').value.trim();
@@ -1768,6 +1781,7 @@
         if(data.baths != null) $('f-baths').value = data.baths;
         if(data.sqft != null) $('f-sqft').value = data.sqft;
         if(data.units != null) $('f-units').value = data.units;
+        if(data.units > 1 && !propTypeUserEdited) $('f-proptype').value = 'apartment';
         if(data.taxAnnual != null) $('f-tax-annual').value = data.taxAnnual;
         if(data.taxAssessed != null) $('f-assessed-value').value = data.taxAssessed;
         if(data.description) $('f-notes').value = (data.description || '').slice(0, 500);
