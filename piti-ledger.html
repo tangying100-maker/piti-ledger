@@ -353,7 +353,7 @@
         <div class="sub">Mesa · Tempe · Phoenix, AZ — 投资房源审核</div>
       </div>
     </div>
-    <div class="rule-note">通过标准：租金 × <b>0.7</b> ≥ PITI</div>
+    <div class="rule-note">通过标准：租金 × <span id="ratio-display" style="cursor:pointer; border-bottom:2px dashed var(--accent); padding:0 4px;" title="点击切换覆盖率阈值"><b>0.7</b></span> ≥ PITI<div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap;" id="ratio-pills"><span class="pill tiny ratio-set" data-r="0.7" style="background:var(--accent);color:#fff;">0.70</span><span class="pill tiny ratio-set" data-r="0.75">0.75</span><span class="pill tiny ratio-set" data-r="0.8">0.80</span><input type="number" id="ratio-custom" placeholder="自定义" min="0.1" max="2" step="0.01" style="width:62px; height:22px; font-family:'IBM Plex Mono',monospace; font-size:9.5px; padding:0 5px; border:1px solid var(--border); border-radius:4px; background:var(--card); color:var(--ink); outline:none;" title="自定义覆盖率阈值"></div></div>
   </header>
 
   <details class="assume">
@@ -401,23 +401,43 @@
     '85003':1725,'85004':1616,'85006':1501,'85007':1375,'85008':1418,'85009':1182,'85012':1553,'85013':1516,'85014':1439,'85015':1247,'85016':1698,'85017':1215,'85018':1616,'85019':1441,'85020':1430,'85021':1220,'85022':1384,'85023':1308,'85024':1847,'85027':1449,'85028':2566,'85029':1234,'85031':1025,'85032':1639,'85033':1403,'85034':1392,'85035':1354,'85037':1736,'85040':1802,'85041':2207,'85042':1691,'85043':1970,'85044':1540,'85045':2901,'85048':1822,'85050':2574,'85051':1275,'85053':1252,'85054':1957,'85083':2693,'85085':1732,'85310':2274,'85339':2133,
     '85281':1687,'85282':1584,'85283':1569,'85284':2769,'85288':1872
   };
-  // Bedroom-count multiplier relative to a 2-bed unit. Derived from 6 Rentometer
-  // Pro reports (paid, user-supplied): Mesa 85201 x2, Mesa 85203, Tempe 85281,
-  // Tempe 85283, Phoenix 85008 — averaging each report's 1/3/4-bed median rent
-  // against its own 2-bed median. Consistent within ~10-15% across all three
-  // cities, so applied as one city-wide curve rather than per-city tables.
-  // ZORI_BASELINE below is treated as a ~2-bed-equivalent typical-unit anchor.
-  const ZORI_BED_MULTIPLIER = {1:0.81, 2:1.00, 3:1.48, 4:1.75};
-  // House vs apartment, holding bed count constant: comparing same-bed-count house
-  // vs apartment comps across all 6 reports showed only ~1-4% difference — most of
-  // the "house costs more" effect is actually the bed-count effect above, already
-  // captured by ZORI_BED_MULTIPLIER. This is a small residual, not a blanket premium.
-  const ZORI_HOUSE_PREMIUM = 1.03;
+  // Rentometer Pro bed-count multipliers, split by property type.
+  // Derived from 6 paid Rentometer reports (July 2026), 110 deduped listings,
+  // per-ZIP per-type per-BR P50 analysis. ZORI_BASELINE is the universal 2BR anchor.
+  // _default = universal per-type fallback when ZIP has no Rentometer data.
+  // House: full curve only available for 85281 (only ZIP with 1-4BR house listings).
+  // Apartment: 1BR from 3-ZIP avg (85008/85201/85203); 3-4BR no apt data → old universal.
+  const RENTO_MULT = {
+    house: {
+      _default: {1:0.71, 2:1.00, 3:1.47, 4:1.64},
+      '85281': {1:0.71, 2:1.00, 3:1.47, 4:1.64},
+    },
+    apartment: {
+      _default: {1:0.85, 2:1.00, 3:1.48, 4:1.75},
+      '85008': {1:0.82, 2:1.00},
+      '85201': {1:0.89, 2:1.00},
+      '85203': {1:0.84, 2:1.00},
+    }
+  };
+  // Compatibility alias for code still referencing old name.
+  const ZORI_BED_MULTIPLIER = RENTO_MULT.apartment._default;
   // Heuristic, not data-backed: extra bathrooms beyond 1 nudge rent up a bit.
   const ZORI_BATH_ADJUST_PER_EXTRA = 0.04;
+
+  // Get bed multiplier for a given ZIP + property type.
+  // Falls back: per-ZIP → per-type _default → apartment _default.
+  function getBedMult(zip, propType){
+    const type = (propType === 'multifamily' || propType === 'apartment') ? 'apartment' : 'house';
+    const tm = RENTO_MULT[type];
+    if(!tm) return RENTO_MULT.apartment._default;
+    const perZip = tm[zip];
+    if(perZip) return perZip;
+    return tm._default || RENTO_MULT.apartment._default;
+  }
   let properties = [];
-  let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:''};
+  let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7};
   let editingId = null;
+  let coverageRatio = 0.7;
 
   function toast(msg){
     const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -450,6 +470,7 @@
       const a = localStorage.getItem('piti-assumptions');
       if(a) assumptions = JSON.parse(a);
     }catch(e){ /* not set yet */ }
+    coverageRatio = assumptions.coverageRatio || 0.7;
     try{
       const p = localStorage.getItem('piti-properties');
       if(p) properties = JSON.parse(p);
@@ -489,6 +510,14 @@
     $('a-rentcast-key').value = assumptions.rentcastKey || '';
     $('a-anthropic-key').value = assumptions.anthropicKey || '';
     $('a-gemini-key').value = assumptions.geminiKey || '';
+    // Update coverage ratio display
+    $('ratio-display').innerHTML = `<b>${coverageRatio.toFixed(2)}</b>`;
+    $('ratio-custom').value = [0.7,0.75,0.8].includes(coverageRatio) ? '' : coverageRatio;
+    document.querySelectorAll('.ratio-set').forEach(p=>{
+      const active = +p.dataset.r === coverageRatio;
+      p.style.background = active ? 'var(--accent)' : '';
+      p.style.color = active ? '#fff' : '';
+    });
   }
   ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
     $(id).addEventListener('change', ()=>{
@@ -497,10 +526,36 @@
         tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value,
         rentcastKey:$('a-rentcast-key').value.trim(),
         anthropicKey:$('a-anthropic-key').value.trim(),
-        geminiKey:$('a-gemini-key').value.trim()
+        geminiKey:$('a-gemini-key').value.trim(),
+        coverageRatio
       };
       saveAssumptions();
     });
+  });
+  // Coverage ratio pills
+  document.querySelectorAll('.ratio-set').forEach(pill=>{
+    pill.addEventListener('click', ()=>{
+      coverageRatio = +pill.dataset.r;
+      assumptions.coverageRatio = coverageRatio;
+      $('ratio-custom').value = '';
+      saveAssumptions();
+      hydrateAssumptionFields();
+      render(); // Re-render cards with new threshold
+    });
+  });
+  // Custom coverage ratio input
+  $('ratio-custom').addEventListener('change', ()=>{
+    const v = parseFloat($('ratio-custom').value);
+    if(isNaN(v) || v <= 0 || v > 2){
+      toast('请输入 0.01~2.00 之间的数字');
+      $('ratio-custom').value = '';
+      return;
+    }
+    coverageRatio = v;
+    assumptions.coverageRatio = coverageRatio;
+    saveAssumptions();
+    hydrateAssumptionFields();
+    render();
   });
   document.querySelectorAll('.down-quickset').forEach(pill=>{
     pill.addEventListener('click', ()=>{
@@ -893,20 +948,21 @@
     if(!base) return null;
     let rent = base;
     const bedKey = Math.min(4, Math.max(1, Math.round(beds) || 2));
-    rent *= ZORI_BED_MULTIPLIER[bedKey];
-    if(propType === 'house') rent *= ZORI_HOUSE_PREMIUM;
+    const mult = getBedMult(zip, propType);
+    rent *= mult[bedKey] || mult[2];
     const extraBaths = Math.max(0, (baths || 1) - 1);
     rent *= (1 + extraBaths * ZORI_BATH_ADJUST_PER_EXTRA);
     return Math.round(rent);
   }
 
-  // Per-unit rent estimate for multifamily — always uses 'apartment' type (no house premium)
+  // Per-unit rent estimate for multifamily — always uses apartment multipliers.
   function estimateUnitRent(zip, beds, baths){
     const base = ZORI_BASELINE[zip];
     if(!base) return null;
     let rent = base;
     const bedKey = Math.min(4, Math.max(1, Math.round(beds) || 2));
-    rent *= ZORI_BED_MULTIPLIER[bedKey];
+    const mult = getBedMult(zip, 'apartment');
+    rent *= mult[bedKey] || mult[2];
     const extraBaths = Math.max(0, (baths || 1) - 1);
     rent *= (1 + extraBaths * ZORI_BATH_ADJUST_PER_EXTRA);
     return Math.round(rent);
@@ -1131,7 +1187,7 @@
   function renderCard(p){
     const piti = calcPITI(p);
     const rent = estimateRent(p);
-    const threshold = rent.total * 0.7;
+    const threshold = rent.total * coverageRatio;
     const pass = threshold >= piti.total && rent.total > 0;
     const margin = threshold - piti.total;
 
@@ -1185,7 +1241,7 @@
             `}
           </div>
           <div class="margin-box ${pass?'approve':'reject'}" style="margin-top:12px;">
-            <div class="cap">租金×0.7 − PITI</div>
+            <div class="cap">租金×${coverageRatio.toFixed(2)} − PITI</div>
             <div class="big">${margin>=0?'+':''}${fmt(margin)} /月</div>
           </div>
           <div style="margin-top:10px;">
@@ -1352,11 +1408,24 @@
   // ---------- add / edit form ----------
   function openForm(existing){
     editingId = existing ? existing.id : null;
+    // When creating new property, inherit defaults from the last saved property
+    // (if any), falling back to global assumptions only if no properties exist.
+    let dflDown = assumptions.down, dflRate = assumptions.rate, dflTerm = assumptions.term;
+    let dflTax = assumptions.tax, dflIns = assumptions.ins, dflHoa = assumptions.hoa;
+    if(!existing && properties.length){
+      const last = properties.reduce((a,b)=>a.createdAt>b.createdAt?a:b);
+      dflDown = last.down ?? dflDown;
+      dflRate = last.rate ?? dflRate;
+      dflTerm = last.term ?? dflTerm;
+      dflTax = last.tax ?? dflTax;
+      dflIns = last.ins ?? dflIns;
+      dflHoa = last.hoa ?? dflHoa;
+    }
     const p = existing || {
       id: uid(), address:'', city:'Mesa', zip:'', propType:'house', propertyType:'single_family',
       homeType:'', assessedValue:0, assessorInfo:'', price:300000,
-      down:assumptions.down, rate:assumptions.rate, term:assumptions.term,
-      tax:assumptions.tax, ins:assumptions.ins, hoa:assumptions.hoa,
+      down:dflDown, rate:dflRate, term:dflTerm,
+      tax:dflTax, ins:dflIns, hoa:dflHoa,
       comps:[null,null,null], manualRent:0, tier:'updated', rentAdjustPct:0,
       beds:'', baths:'', sqft:'', units:1, notes:'',
       imageUrls:[], taxAnnual:null, aiAnalyzed:false, aiReason:'',
@@ -1436,7 +1505,13 @@
             </div>
             <div id="assessor-status" style="margin-top:6px; font-size:12px; color:var(--slate);">${p.assessorInfo ? escapeHtml(p.assessorInfo) : ''}</div>
           </div>
-          <div class="field"><label>年度房产税 $（从 Zillow 页面自动提取，有则直接用）</label><input type="number" id="f-tax-annual" value="${p.taxAnnual||''}" placeholder="从页面源码解析自动填入" step="50"></div>
+          <div class="field"><label>年度房产税 $（从 Zillow 页面自动提取，有则直接用）</label>
+            <div style="display:flex; gap:6px;">
+              <input type="number" id="f-tax-annual" value="${p.taxAnnual||''}" placeholder="从页面源码解析自动填入" step="50" style="flex:1;">
+              <button type="button" class="ghost small" id="btn-tax-retry" style="white-space:nowrap;" title="通过 ArcGIS 公开数据自动估算年税">🔍 自动查税</button>
+            </div>
+            <div id="tax-retry-status" style="margin-top:4px; font-size:11px; color:var(--slate);"></div>
+          </div>
           <div class="field full"><label>备注（描述摘要 / 照片判断理由等）</label><textarea id="f-notes" rows="2">${existing?escapeHtml(p.notes||''):''}</textarea></div>
         </div>
         <div style="margin-top:16px;">
@@ -1662,6 +1737,12 @@
       window.open(assessorSearchUrl(street, city), '_blank');
       statusBox.textContent = '已在新标签页打开 Assessor 搜索 — 找到 Parcel 后点进详情页，把 "Assessed LPV" 数值填回左边输入框';
     });
+    $('btn-tax-retry').addEventListener('click', async ()=>{
+      const taxStatus = $('tax-retry-status');
+      if(taxStatus) taxStatus.innerHTML = '<span class="spinner"></span> 查询中…';
+      const ok = await autoFetchTaxFromArcGIS(null);
+      if(!ok && taxStatus) taxStatus.innerHTML = '<span style="color:var(--reject);">⚠️ 未找到该地址的地税数据，请手动填入</span>';
+    });
 
     if(!existing){
       // Tab switching
@@ -1742,10 +1823,10 @@
       // was still empty and the ArcGIS result never made it into the saved
       // property at all.
       async function autoFetchTaxFromArcGIS(statusEl){
-        if($('f-tax-annual').value) return; // Already have tax data
+        if($('f-tax-annual').value) return true; // Already have tax data
         const street = $('f-address').value.trim();
         const city = $('f-city').value;
-        if(!street || !city) return;
+        if(!street || !city) return false;
         const marker = document.createElement('span');
         marker.style.color = 'var(--slate)';
         marker.textContent = ' · 🔎 查询地税中…';
@@ -1754,13 +1835,21 @@
           const result = await queryArcGISAssessor(street, city);
           $('f-tax-annual').value = result.taxEstimate;
           $('f-assessed-value').value = result.lpv;
-          $('assessor-status').dataset.info = `ArcGIS 自动查询: APN ${result.apn}, LPV $${result.lpv.toLocaleString()}, ${result.rateLabel} → 年税 $${result.taxEstimate.toLocaleString()}`;
+          const info = `ArcGIS 自动查询: APN ${result.apn}, LPV $${result.lpv.toLocaleString()}, ${result.rateLabel} → 年税 $${result.taxEstimate.toLocaleString()}`;
+          $('assessor-status').dataset.info = info;
           $('assessor-status').textContent = `已从 ArcGIS 查到 LPV $${result.lpv.toLocaleString()} (APN ${result.apn})，估算年税 ≈ $${result.taxEstimate.toLocaleString()}`;
+          const taxRetryStatus = $('tax-retry-status');
+          if(taxRetryStatus) taxRetryStatus.innerHTML = `<span style="color:var(--approve);">✅ 自动查税成功：$${result.taxEstimate.toLocaleString()}/年（${result.rateLabel}）</span>`;
           marker.style.color = 'var(--accent)';
           marker.textContent = ` · 地税 $${result.taxEstimate.toLocaleString()}/年（ArcGIS 自动估算，${result.rateLabel}）`;
+          return true;
         }catch(e){
           console.warn('ArcGIS tax auto-fetch failed:', e.message);
-          marker.remove();
+          marker.style.color = 'var(--reject)';
+          marker.textContent = ` · 地税自动查询失败：${e.message}`;
+          const taxRetryStatus = $('tax-retry-status');
+          if(taxRetryStatus) taxRetryStatus.innerHTML = `<span style="color:var(--reject);">⚠️ 自动查税失败，请手动填入或点「🔍 自动查税」重试</span>`;
+          return false;
         }
       }
 
@@ -1892,13 +1981,15 @@
       const idx = properties.findIndex(x=>x.id===np.id);
       if(idx>=0) properties[idx]=np; else properties.push(np);
       saveProperties();
-      // Carry this rate forward as the default for the next new property —
-      // rates move often enough that re-typing it every time is annoying.
-      if(np.rate && np.rate !== assumptions.rate){
-        assumptions = {...assumptions, rate:np.rate};
-        saveAssumptions();
-        hydrateAssumptionFields();
-      }
+      // Carry forward financial params as defaults for the next new property
+      let changed = false;
+      if(np.down && np.down !== assumptions.down){ assumptions = {...assumptions, down:np.down}; changed=true; }
+      if(np.rate && np.rate !== assumptions.rate){ assumptions = {...assumptions, rate:np.rate}; changed=true; }
+      if(np.term && np.term !== assumptions.term){ assumptions = {...assumptions, term:np.term}; changed=true; }
+      if(np.tax && np.tax !== assumptions.tax){ assumptions = {...assumptions, tax:np.tax}; changed=true; }
+      if(np.ins && np.ins !== assumptions.ins){ assumptions = {...assumptions, ins:np.ins}; changed=true; }
+      if(np.hoa != null && np.hoa !== assumptions.hoa){ assumptions = {...assumptions, hoa:np.hoa}; changed=true; }
+      if(changed){ saveAssumptions(); hydrateAssumptionFields(); }
       slot.innerHTML=''; editingId=null;
       render();
       toast('已保存');
@@ -1910,15 +2001,15 @@
   $('btn-copy').addEventListener('click', ()=>{
     const passing = properties.filter(p=>{
       const piti = calcPITI(p); const rent = estimateRent(p);
-      return rent.total*0.7 >= piti.total && rent.total>0;
+      return rent.total*coverageRatio >= piti.total && rent.total>0;
     });
     if(!passing.length){ toast('目前没有达标房源'); return; }
     const lines = passing.map(p=>{
       const piti = calcPITI(p); const rent = estimateRent(p);
       const rentStr = rent.units>1 ? `${fmt(rent.adj)}/unit x${rent.units}=${fmt(rent.total)}` : fmt(rent.total);
-      return `${p.address}, ${p.city} AZ | 售价 ${fmt(p.price)} | PITI ${fmt(piti.total)}/mo | 估算租金 ${rentStr}/mo | 净余 ${fmt(rent.total*0.7-piti.total)}/mo`;
+      return `${p.address}, ${p.city} AZ | 售价 ${fmt(p.price)} | PITI ${fmt(piti.total)}/mo | 估算租金 ${rentStr}/mo | 剩余 ${fmt(rent.total*coverageRatio-piti.total)}/mo`;
     });
-    const text = `达标投资房源（租金×0.7 ≥ PITI）\n\n` + lines.join('\n');
+    const text = `达标投资房源（租金×${coverageRatio.toFixed(2)} ≥ PITI）\n\n` + lines.join('\n');
     navigator.clipboard.writeText(text).then(()=>toast('已复制到剪贴板，可粘贴发邮件')).catch(()=>toast('复制失败，请手动选取文本'));
   });
 
