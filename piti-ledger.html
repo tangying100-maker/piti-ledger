@@ -401,39 +401,102 @@
     '85003':1725,'85004':1616,'85006':1501,'85007':1375,'85008':1418,'85009':1182,'85012':1553,'85013':1516,'85014':1439,'85015':1247,'85016':1698,'85017':1215,'85018':1616,'85019':1441,'85020':1430,'85021':1220,'85022':1384,'85023':1308,'85024':1847,'85027':1449,'85028':2566,'85029':1234,'85031':1025,'85032':1639,'85033':1403,'85034':1392,'85035':1354,'85037':1736,'85040':1802,'85041':2207,'85042':1691,'85043':1970,'85044':1540,'85045':2901,'85048':1822,'85050':2574,'85051':1275,'85053':1252,'85054':1957,'85083':2693,'85085':1732,'85310':2274,'85339':2133,
     '85281':1687,'85282':1584,'85283':1569,'85284':2769,'85288':1872
   };
-  // Rentometer Pro bed-count multipliers, split by property type (house vs
-  // apartment/condo/townhouse), pooled across all 6 paid Rentometer Pro
-  // reports (Jul 2026: 536 N Hall & 719 N Cherry & 545 W Ivyglen in Mesa,
-  // Phoenix 85008, Tempe 85281 & 85283) using each report's per-listing
-  // "Bldg Type" column — ~120 listings total. Pooled city-wide rather than
-  // per-ZIP: per-ZIP×type×bed cells are too sparse to be reliable.
-  //
-  // Both curves are indexed to ONE shared anchor -- the pooled apartment 2BR
-  // median ($1,363) -- NOT to their own 2BR value. An earlier version
-  // normalized each curve to 1.00 at its own 2BR rate, which made house and
-  // apartment rent identical at 2BR *by construction*, hiding a real ~25%
-  // house premium the data actually shows even at the same bed count
-  // (2BR house pooled median $1,700 vs 2BR apartment $1,363). That's the
-  // exact case a 2-bed/1-bath duplex/fourplex unit lands in, so this bug
-  // made the house/apartment selector look like it did nothing for the most
-  // common multi-family unit size.
-  // House curve (n=5/7/27/30 for 1/2/3/4BR) has real medians throughout.
-  // Apartment curve: 1-2BR are real per-type medians (n=25/24). 3-4BR
-  // "apartment" listings are essentially nonexistent in the data (one real
-  // 3BR apartment data point total, close to the house number anyway) --
-  // not enough for an independent curve, so 3-4BR apartment borrows the
-  // house curve's value rather than guessing or flatlining at 2BR.
-  const RENT_MULT_HOUSE = {1:0.88, 2:1.25, 3:1.61, 4:1.87};
-  const RENT_MULT_APARTMENT = {1:0.85, 2:1.00, 3:1.61, 4:1.87};
-  // Compatibility alias for code still referencing old name.
-  const ZORI_BED_MULTIPLIER = RENT_MULT_APARTMENT;
+  // Real per-listing medians from all 6 paid Rentometer Pro reports (Jul
+  // 2026: 536 N Hall & 719 N Cherry & 545 W Ivyglen in Mesa, Phoenix 85008,
+  // Tempe 85281 & 85283), ~120 listings total, grouped by ZIP -> propType ->
+  // bed using each report's per-listing "Bldg Type" column. null = no real
+  // data for that cell. 'apartment' bucket includes Condo/Townhouse.
+  const RENTO_ZIP = {
+    '85201': { apartment:{1:1158, 2:1300, 3:1999, 4:null}, house:{1:1195, 2:null, 3:2032, 4:2475} },
+    '85203': { apartment:{1:1125, 2:1375, 3:null, 4:null}, house:{1:null, 2:null, 3:2285, 4:2650} },
+    '85204': { apartment:{1:1150, 2:1375, 3:null, 4:null}, house:{1:null, 2:null, 3:2250, 4:2490} },
+    '85210': { apartment:{1:1195, 2:null, 3:null, 4:null}, house:{1:null, 2:null, 3:null, 4:null} },
+    '85213': { apartment:{1:1129, 2:null, 3:null, 4:null}, house:{1:null, 2:null, 3:2245, 4:null} },
+    '85008': { apartment:{1:1126, 2:1378, 3:null, 4:null}, house:{1:1149, 2:null, 3:2145, 4:2400} },
+    '85281': { apartment:{1:1539, 2:null, 3:null, 4:null}, house:{1:1200, 2:1700, 3:2500, 4:2795} },
+    '85282': { apartment:{1:1233, 2:1803, 3:null, 4:null}, house:{1:null, 2:null, 3:2450, 4:2895} },
+    '85283': { apartment:{1:1304, 2:1745, 3:2450, 4:null}, house:{1:null, 2:1850, 3:2395, 4:2873} },
+  };
+  const RENTO_ZIP_CITY = {
+    '85201':'Mesa', '85203':'Mesa', '85204':'Mesa', '85210':'Mesa', '85213':'Mesa',
+    '85008':'Phoenix',
+    '85281':'Tempe', '85282':'Tempe', '85283':'Tempe',
+  };
+  // Same data pooled at the city level, for ZIPs with data too thin on
+  // their own (e.g. 85210 has one 1BR apartment point and nothing else).
+  const RENTO_CITY = {
+    Mesa:    { apartment:{1:1153, 2:1300, 3:1999, 4:null}, house:{1:1195, 2:null, 3:2075, 4:2495} },
+    Phoenix: { apartment:{1:1126, 2:1378, 3:null, 4:null}, house:{1:1149, 2:null, 3:2145, 4:2400} },
+    Tempe:   { apartment:{1:1233, 2:1790, 3:2450, 4:null}, house:{1:1200, 2:1700, 3:2495, 4:2873} },
+  };
+  // Last-resort fallback for a ZIP with no Rentometer data at all (i.e. not
+  // one of the ~9 ZIPs actually sampled across these 6 reports).
+  const RENTO_UNIVERSAL = { apartment:{1:1160, 2:1363, 3:1999, 4:null}, house:{1:1200, 2:1700, 3:2195, 4:2550} };
   // Heuristic, not data-backed: extra bathrooms beyond 1 nudge rent up a bit.
   const ZORI_BATH_ADJUST_PER_EXTRA = 0.04;
 
-  // Get bed multiplier for a given property type (house vs apartment).
+  function rentoTiers(zip){
+    const city = RENTO_ZIP_CITY[zip];
+    const tiers = [];
+    if(RENTO_ZIP[zip]) tiers.push(RENTO_ZIP[zip]);
+    if(city && RENTO_CITY[city]) tiers.push(RENTO_CITY[city]);
+    tiers.push(RENTO_UNIVERSAL);
+    return tiers;
+  }
+  // Pure apartment cascade: zip -> city -> universal, real apartment data
+  // only. Deliberately does NOT fall back to house data at any tier here —
+  // real apartment comps from a broader-but-still-apartment tier are a
+  // better estimate than that specific ZIP's own house price, which is a
+  // different product. (3-4BR apartment listings are close to nonexistent
+  // in this market, so this cascade legitimately comes up empty for those —
+  // callers fall back to the house median themselves in that case, not by
+  // silently borrowing a house price mid-cascade.)
+  function resolveApartmentMedian(zip, bed){
+    for(const tier of rentoTiers(zip)){
+      if(tier.apartment[bed] != null) return tier.apartment[bed];
+    }
+    return null;
+  }
+  // House lookup: at EACH tier (zip, then city, then universal), a real
+  // house comp wins; but if that tier has no house data, its OWN apartment
+  // data wins before moving to a broader tier. This is the crux of the fix:
+  // Mesa 85201/85203 have zero 2BR house comps in the data, so without this
+  // same-tier fallback the estimate would borrow whatever tier DID have 2BR
+  // house data — which turned out to be 100% Tempe's ASU-adjacent
+  // submarket, an inflated, unrelated comp set for a Mesa property.
+  function resolveHouseMedian(zip, bed){
+    for(const tier of rentoTiers(zip)){
+      if(tier.house[bed] != null) return tier.house[bed];
+      if(tier.apartment[bed] != null) return tier.apartment[bed];
+    }
+    return null;
+  }
+  function resolveRentoMedian(zip, type, bed){
+    if(type === 'house') return resolveHouseMedian(zip, bed);
+    // Real apartment data first, city/universal included; only once that's
+    // fully exhausted (true for 3-4BR) fall back to a house median, itself
+    // cascading zip -> city -> universal rather than jumping straight to
+    // whichever tier happens to have a number.
+    return resolveApartmentMedian(zip, bed) ?? resolveHouseMedian(zip, bed);
+  }
+
+  // Ratio-to-anchor for a given ZIP/type/bed, where the anchor is that same
+  // ZIP's (cascading to city, then universal) apartment 2BR median — matches
+  // how ZORI_BASELINE is documented ("~2-bed-equivalent typical-unit
+  // anchor"), so multiplying it by this ratio lands back on a real dollar
+  // figure consistent with the ZIP's own comps. The anchor is always a real
+  // apartment number (resolveApartmentMedian never falls back to house), so
+  // it can't silently drift onto a house price the way an earlier version
+  // of this did for ZIPs (like 85281) with house comps but no apartment ones.
   function getBedMult(zip, propType){
     const type = (propType === 'multifamily' || propType === 'apartment') ? 'apartment' : 'house';
-    return type === 'apartment' ? RENT_MULT_APARTMENT : RENT_MULT_HOUSE;
+    const anchor = resolveApartmentMedian(zip, 2) ?? RENTO_UNIVERSAL.apartment[2];
+    const mult = {};
+    for(const bed of [1,2,3,4]){
+      const value = resolveRentoMedian(zip, type, bed);
+      mult[bed] = value != null ? value / anchor : null;
+    }
+    return mult;
   }
   let properties = [];
   let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7};
