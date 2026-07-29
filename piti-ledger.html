@@ -959,6 +959,81 @@
     return `https://mcassessor.maricopa.gov/mcs/?q=${encodeURIComponent(street + ' ' + city)}`;
   }
 
+  // Tax rate estimates based on Ownwell effective rate data (tax ÷ FCV).
+  // These are median effective rates; actual tax varies by school district,
+  // special districts, and exemptions within each city.
+  // Sources: Chandler AZ FY25-26 Tax Rate Comparison PDF; Ownwell Maricopa trends.
+  const JURISDICTION_TAX_RATES = {
+    MESA:     { pctOfFCV: 0.44, label: 'Mesa 中位' },
+    PHOENIX:  { pctOfFCV: 0.46, label: 'Phoenix 中位' },
+    TEMPE:    { pctOfFCV: 0.53, label: 'Tempe 中位' },
+    SCOTTSDALE: { pctOfFCV: 0.37, label: 'Scottsdale 中位' },
+    CHANDLER: { pctOfFCV: 0.47, label: 'Chandler 中位' },
+    GILBERT:  { pctOfFCV: 0.46, label: 'Gilbert 中位' },
+    GLENDALE: { pctOfFCV: 0.43, label: 'Glendale 中位' },
+  };
+
+  // Fallback rate for unknown jurisdictions in Maricopa County.
+  const MARICOPA_DEFAULT_TAX_RATE = 0.46; // pct of FCV
+
+  // JSONP-based ArcGIS parcel query. Returns { fcv, lpv, jurisdiction, apn, taxEstimate }
+  // Uses JSONP (<script> injection) so it works from any local HTML file with no CORS proxy.
+  async function queryArcGISAssessor(street, city){
+    return new Promise((resolve, reject) => {
+      const cbName = '_arcgis_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+      const timeout = setTimeout(() => {
+        delete window[cbName];
+        const s = document.getElementById(cbName);
+        if(s) s.remove();
+        reject(new Error('ArcGIS query timed out'));
+      }, 12000);
+
+      window[cbName] = function(data){
+        clearTimeout(timeout);
+        delete window[cbName];
+        const s = document.getElementById(cbName);
+        if(s) s.remove();
+
+        if(!data || !data.features || !data.features.length){
+          reject(new Error('ArcGIS: no parcel found for this address'));
+          return;
+        }
+        const a = data.features[0].attributes;
+        const fcv = parseInt((a.FCV_CUR || '').replace(/[, ]/g,'')) || 0;
+        const lpv = parseInt((a.LPV_CUR || '').replace(/[, ]/g,'')) || 0;
+        const jur = (a.JURISDICTION || '').trim().toUpperCase();
+        const apn = (a.APN || '').trim();
+        const rateInfo = JURISDICTION_TAX_RATES[jur] || null;
+        const ratePct = rateInfo ? rateInfo.pctOfFCV : MARICOPA_DEFAULT_TAX_RATE;
+        const taxEstimate = Math.round(fcv * ratePct / 100);
+        resolve({
+          fcv, lpv, jurisdiction: a.JURISDICTION || '', apn,
+          taxEstimate,
+          rateUsed: ratePct,
+          rateLabel: rateInfo ? rateInfo.label : `Maricopa 默认 ${ratePct}%`,
+        });
+      };
+
+      const where = encodeURIComponent(
+        "UPPER(PHYSICAL_ADDRESS) LIKE UPPER('%" +
+        street.toUpperCase().replace(/'/g,"''") + "%" +
+        city.toUpperCase().replace(/'/g,"''") + "%')"
+      );
+      const script = document.createElement('script');
+      script.id = cbName;
+      script.src = 'https://gis.mcassessor.maricopa.gov/arcgis/rest/services/MaricopaDynamicQueryService/MapServer/3/query'
+        + '?where=' + where
+        + '&outFields=APN,LPV_CUR,FCV_CUR,JURISDICTION,PHYSICAL_ADDRESS'
+        + '&returnGeometry=false&f=json&callback=' + cbName;
+      script.onerror = function(){
+        clearTimeout(timeout);
+        delete window[cbName];
+        reject(new Error('ArcGIS: network error'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
   // ---------- calculations ----------
   function calcPITI(p){
     const loan = p.price * (1 - p.down/100);
@@ -1597,6 +1672,27 @@
         statusBox.innerHTML = parts.join(' · ');
       }
 
+      // Auto-fetch property tax from Maricopa County ArcGIS when Zillow didn't have it.
+      async function autoFetchTaxFromArcGIS(statusEl){
+        if($('f-tax-annual').value) return; // Already have tax data
+        const street = $('f-address').value.trim();
+        const city = $('f-city').value;
+        if(!street || !city) return;
+        try{
+          const result = await queryArcGISAssessor(street, city);
+          $('f-tax-annual').value = result.taxEstimate;
+          $('f-assessed-value').value = result.lpv;
+          $('assessor-status').dataset.info = `ArcGIS 自动查询: APN ${result.apn}, LPV $${result.lpv.toLocaleString()}, ${result.rateLabel} → 年税 $${result.taxEstimate.toLocaleString()}`;
+          $('assessor-status').textContent = `已从 ArcGIS 查到 LPV $${result.lpv.toLocaleString()} (APN ${result.apn})，估算年税 ≈ $${result.taxEstimate.toLocaleString()}`;
+          if(statusEl){
+            const s = statusEl.innerHTML;
+            statusEl.innerHTML = s + ` <span style="color:var(--accent);">· 地税 $${result.taxEstimate.toLocaleString()}/年（ArcGIS 自动估算，${result.rateLabel}）</span>`;
+          }
+        }catch(e){
+          console.warn('ArcGIS tax auto-fetch failed:', e.message);
+        }
+      }
+
       // URL handler — parses the address out of the link text (no fetch to Zillow),
       // then uses RentCast (licensed data) or the ZORI model. Full data + photos
       // require the "粘贴页面源码" tab (you paste text you copied yourself — never
@@ -1636,6 +1732,7 @@
           ? (missing.length ? `已从 RentCast 填充，仍缺：${missing.join('、')}` : '已从 RentCast 填充，请核对')
           : '未配置 RentCast Key，售价/户型需手动填写；租金已用免费模型估算')
           + `<br><span style="color:var(--accent);">💡 想要售价、真实户型、照片？在 Zillow 页面按 Ctrl+U 复制源码，粘贴到"页面源码"标签可提取全部信息</span>`;
+        autoFetchTaxFromArcGIS(statusBox);
       });
 
       // HTML source handler — the main new feature
@@ -1656,6 +1753,8 @@
             const zip = data.zip || $('f-zip').value.trim();
             if(zip) applyZoriFallback(zip);
           }
+          // Auto-fetch tax from ArcGIS if Zillow didn't have it
+          autoFetchTaxFromArcGIS(statusBox);
         }catch(e){
           console.error(e);
           statusBox.innerHTML = `<span style="color:var(--reject);">解析失败：${escapeHtml(e.message)}</span>`;
