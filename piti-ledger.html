@@ -359,7 +359,13 @@
   <details class="assume">
     <summary><span>默认假设参数（新增房源时自动带入，单套内仍可修改）</span><span>展开 ▾</span></summary>
     <div class="assume-grid">
-      <div class="field"><label>首付比例 %</label><input type="number" id="a-down" value="20" step="1"></div>
+      <div class="field"><label>首付比例 %</label>
+        <input type="number" id="a-down" value="25" step="1">
+        <div class="tier-pills" style="margin-top:5px;">
+          <span class="pill tiny down-quickset" data-val="20">20%</span>
+          <span class="pill tiny down-quickset" data-val="25">25%</span>
+        </div>
+      </div>
       <div class="field"><label>贷款年利率 %</label><input type="number" id="a-rate" value="7.0" step="0.05"></div>
       <div class="field"><label>贷款年限（年）</label><input type="number" id="a-term" value="30" step="1"></div>
       <div class="field"><label>房产税率 %/年</label><input type="number" id="a-tax" value="0.65" step="0.01"></div>
@@ -410,7 +416,7 @@
   // Heuristic, not data-backed: extra bathrooms beyond 1 nudge rent up a bit.
   const ZORI_BATH_ADJUST_PER_EXTRA = 0.04;
   let properties = [];
-  let assumptions = {down:20, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:''};
+  let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:''};
   let editingId = null;
 
   function toast(msg){
@@ -465,6 +471,12 @@
       saveAssumptions();
     });
   });
+  document.querySelectorAll('.down-quickset').forEach(pill=>{
+    pill.addEventListener('click', ()=>{
+      $('a-down').value = pill.dataset.val;
+      $('a-down').dispatchEvent(new Event('change'));
+    });
+  });
 
   // ---------- Zillow link -> RentCast auto-fill ----------
   const ZILLOW_CITIES = ['Mesa','Tempe','Phoenix'];
@@ -486,6 +498,17 @@
   }
 
   // ---------- Zillow page HTML parser ----------
+  // Turn [{beds,baths,count}] groups into one row per physical unit (count=1
+  // each) — every unit gets its own row since each has its own tenant tenure
+  // and condition, which independently affects its own rent adjustment.
+  function explodeUnitGroups(groups){
+    const out = [];
+    for(const g of groups){
+      for(let i=0;i<(g.count||1);i++) out.push({beds:g.beds, baths:g.baths, count:1});
+    }
+    return out;
+  }
+
   // Parses pasted page-source HTML to extract every field we need:
   // address, price, beds, baths, sqft, units, tax, per-unit rents,
   // total rent, and all photo URLs — using multiple strategies.
@@ -559,20 +582,16 @@
           if(r.unitRents.length){
             r.totalRent = r.unitRents.reduce((s,v)=>s+v, 0);
           }
-          // Extract unit layouts: beds/baths per unit
-          const rawLayouts = gdp.units.map(u => ({
-            beds: u.bedrooms ?? u.beds ?? null,
-            baths: u.bathrooms ?? u.bathsFull ?? u.baths ?? null
-          }));
-          // Group identical layouts
-          const layoutMap = {};
-          for(const lu of rawLayouts){
-            if(lu.beds == null && lu.baths == null) continue;
-            const key = `${lu.beds ?? '?'}b${lu.baths ?? '?'}`;
-            if(!layoutMap[key]) layoutMap[key] = {beds:lu.beds, baths:lu.baths, count:0};
-            layoutMap[key].count++;
-          }
-          r.unitLayouts = Object.values(layoutMap);
+          // One row PER REAL UNIT (not grouped) — even units with identical
+          // bed/bath counts get their own row, because each physical unit has
+          // its own tenant tenure / condition and so its own rent adjustment.
+          r.unitLayouts = gdp.units
+            .map(u => ({
+              beds: u.bedrooms ?? u.beds ?? null,
+              baths: u.bathrooms ?? u.bathsFull ?? u.baths ?? null
+            }))
+            .filter(lu => lu.beds != null || lu.baths != null)
+            .map(lu => ({beds:lu.beds, baths:lu.baths, count:1}));
         }
 
         // Detect propertyType from homeType
@@ -622,9 +641,41 @@
             const parts = d.name.split(',');
             if(parts.length >= 3) r.address = parts[0].trim();
           }
+          if(d.description && !r.description) r.description = d.description;
+          const ldAddr = d.address || d.offers?.itemOffered?.address;
+          if(ldAddr && !r.zip) r.zip = ldAddr.postalCode || r.zip;
         }catch(e){ /* skip */ }
       });
     }
+
+    // --- Zip fallback: regex on raw HTML (doesn't depend on Strategy 1/2) ---
+    // Very reliable for this app since it's AZ-only: "..., AZ 85203" or "AZ, 85203".
+    if(!r.zip){
+      const zm = html.match(/\bAZ\b[,\s]*(\d{5})\b/) || html.match(/"zipcode"\s*:\s*"?(\d{5})"?/i) || html.match(/"postalCode"\s*:\s*"?(\d{5})"?/i);
+      if(zm) r.zip = zm[1];
+    }
+
+    // --- Search text fallback for description-based detection below ---
+    // Strategy 4 (duplex/triplex + unit-layout text parsing) needs some text to
+    // search. If Strategy 1's JSON didn't give us a clean descriptionText (page
+    // structure varies, or __NEXT_DATA__ wasn't found at all), fall back to a
+    // meta description tag, or worst case the whole pasted text with HTML tags
+    // stripped — so unit detection still works even when the JSON extraction
+    // above failed entirely.
+    let searchText = r.description || '';
+    if(!searchText){
+      const metaM = html.match(/<meta[^>]*name=["']description["'][^>]*content="([^"]*)"/i)
+                 || html.match(/<meta[^>]*name=["']description["'][^>]*content='([^']*)'/i);
+      if(metaM) searchText = metaM[1];
+    }
+    if(!searchText){
+      searchText = html.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+                        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+                        .replace(/<[^>]+>/g, ' ')
+                        .replace(/&amp;/g,'&').replace(/&nbsp;/g,' ')
+                        .slice(0, 20000); // cap for performance
+    }
+    if(!r.description && searchText) r.description = searchText.slice(0, 2000);
 
     // --- Strategy 3: regex fallbacks ---
     // Images from zillowstatic CDN
@@ -666,10 +717,12 @@
     }
 
     // --- Strategy 4: multifamily detection from description text ---
-    // Look for keywords like "duplex", "triplex", "4-plex", "five units" etc.
-    // and try to infer unit layout.
+    // Look for keywords like "duplex", "triplex", "4-plex", "five units" etc.,
+    // then try to figure out the actual unit-by-unit bed/bath mix — including
+    // MIXED mixes (e.g. "one 3bed/2bath owner's unit plus two 2bed/1bath units",
+    // which is how listings usually describe a 7bed/4bath triplex).
     if(!r.propertyType || !r.unitLayouts.length){
-      const desc = (r.description || '').toLowerCase();
+      const desc = (searchText || '').toLowerCase();
       // Detect unit count from keywords
       let detectedUnits = null;
       const mfPatterns = [
@@ -691,15 +744,39 @@
           break;
         }
       }
+      if(detectedUnits == null && r.units > 1) detectedUnits = r.units;
       if(detectedUnits != null && r.units == null) r.units = detectedUnits;
 
-      // Try to parse unit layout from text like "each unit 2 bed 1 bath" or "2b1b per unit"
       if(detectedUnits && !r.unitLayouts.length){
-        const layoutMatch = desc.match(/(?:each|per)\s*(?:unit|apt|apartment)?[^.]*?(\d)\s*(?:bed|bd|br)(?:room)?s?\s*(?:and|&|,)?\s*(\d)\s*(?:bath|ba)(?:room)?s?/i) ||
-                            desc.match(/(\d)\s*br?\s*(?:\/|,|\s*and\s*)\s*(\d)\s*ba\b/i) ||
-                            desc.match(/(\d)\s*b(?:ed)?(?:room)?\s*\/?\s*(\d)\s*b(?:ath)?(?:room)?\s*(?:per|each|\bunit\b|\bapt\b)/i);
-        if(layoutMatch){
-          r.unitLayouts = [{beds:+layoutMatch[1], baths:+layoutMatch[2], count:detectedUnits}];
+        // Scan for every "<N> bed / <N> bath" mention in the text, each with
+        // a quantity word/number looked up in the ~40 chars right before it
+        // ("two 2 bed 1 bath units", "a 3bd/2ba unit", "3BR/2BA owner's unit").
+        const numWords = {one:1,two:2,three:3,four:4,five:5,six:6,a:1,an:1,the:1};
+        const bbRe = /(\d)\s*(?:bed(?:room)?s?|bd|br)\s*[\/\-,&]?\s*(?:and\s*)?(\d(?:\.\d)?)\s*(?:bath(?:room)?s?|ba)\b/gi;
+        const groups = [];
+        let bm;
+        while((bm = bbRe.exec(desc)) !== null){
+          const before = desc.slice(Math.max(0, bm.index-40), bm.index);
+          const qm = before.match(/(\d+|one|two|three|four|five|six|a|an|the)\s*[\w\s]{0,12}$/i);
+          let count = 1;
+          if(qm){
+            const w = qm[1].toLowerCase();
+            count = numWords[w] ?? (+w || 1);
+          }
+          groups.push({beds:+bm[1], baths:+bm[2], count});
+        }
+        const groupTotal = groups.reduce((s,g)=>s+g.count, 0);
+        if(groups.length && groupTotal === detectedUnits){
+          // Mixed (or uniform) composition found and it adds up to the known
+          // unit count — trust it. Explode to one row per physical unit.
+          r.unitLayouts = explodeUnitGroups(groups);
+        } else if(r.beds != null && r.baths != null && detectedUnits > 0){
+          // No reliable text breakdown (or it didn't add up) — fall back to
+          // dividing the known totals evenly, one row per unit.
+          const b = Math.round(r.beds / detectedUnits) || null;
+          const ba = Math.round((r.baths / detectedUnits) * 2) / 2 || null;
+          r.unitLayouts = explodeUnitGroups([{beds:b, baths:ba, count:detectedUnits}]);
+          r._unitLayoutEvenSplit = true; // flag: this is a guess, not parsed from text
         }
       }
     }
@@ -784,6 +861,25 @@
     const extraBaths = Math.max(0, (baths || 1) - 1);
     rent *= (1 + extraBaths * ZORI_BATH_ADJUST_PER_EXTRA);
     return Math.round(rent);
+  }
+
+  // Reads the unit-layout rows straight from the DOM — no closure dependency,
+  // so it's usable both from openForm()'s handlers and from applyZoriFallback()
+  // below (which lives outside openForm()'s scope).
+  function getFormUnitLayouts(){
+    const rows = document.querySelectorAll('#unit-layout-rows .unit-layout-row');
+    const layouts = [];
+    rows.forEach(r=>{
+      const inputs = r.querySelectorAll('input');
+      const beds = +(inputs[0]?.value) || 0;
+      const baths = +(inputs[1]?.value) || 0;
+      const count = +(inputs[2]?.value) || 0;
+      const pct = inputs[3] ? +(inputs[3].value) || 0 : 0;
+      if(count > 0 && (beds > 0 || baths > 0)){
+        layouts.push({beds, baths, count, rentAdjustPct: pct});
+      }
+    });
+    return layouts;
   }
 
   function applyZoriFallback(zip){
@@ -1195,7 +1291,13 @@
           <div class="field"><label>Bathrooms</label><input type="number" id="f-baths" value="${p.baths}" step="0.5"></div>
           <div class="field"><label>面积 sqft</label><input type="number" id="f-sqft" value="${p.sqft}" step="10"></div>
           <div class="field"><label>Unit 数（几户）</label><input type="number" id="f-units" value="${p.units||1}" step="1"></div>
-          <div class="field"><label>首付 %</label><input type="number" id="f-down" value="${p.down}" step="1"></div>
+          <div class="field"><label>首付 %</label>
+            <input type="number" id="f-down" value="${p.down}" step="1">
+            <div class="tier-pills" style="margin-top:5px;">
+              <span class="pill tiny f-down-quickset" data-val="20">20%</span>
+              <span class="pill tiny f-down-quickset" data-val="25">25%</span>
+            </div>
+          </div>
           <div class="field"><label>年利率 %</label><input type="number" id="f-rate" value="${p.rate}" step="0.05"></div>
           <div class="field"><label>贷款年限</label><input type="number" id="f-term" value="${p.term}" step="1"></div>
           <div class="field"><label>房产税 %/年（乘以下方评估值，若未查则乘售价）</label><input type="number" id="f-tax" value="${p.tax}" step="0.01"></div>
@@ -1243,23 +1345,6 @@
     }
     (p.comps && p.comps.length ? p.comps : [null,null]).forEach(addCompRow);
     $('btn-add-comp').addEventListener('click', ()=>addCompRow(null));
-
-    // ---- Unit layout editor helpers ----
-    function getFormUnitLayouts(){
-      const rows = document.querySelectorAll('#unit-layout-rows .unit-layout-row');
-      const layouts = [];
-      rows.forEach(r=>{
-        const inputs = r.querySelectorAll('input');
-        const beds = +(inputs[0]?.value) || 0;
-        const baths = +(inputs[1]?.value) || 0;
-        const count = +(inputs[2]?.value) || 0;
-        const pct = inputs[3] ? +(inputs[3].value) || 0 : 0;
-        if(count > 0 && (beds > 0 || baths > 0)){
-          layouts.push({beds, baths, count, rentAdjustPct: pct});
-        }
-      });
-      return layouts;
-    }
     function addUnitLayoutRow(beds, baths, count, pct){
       const d = $('unit-layout-rows');
       const row = document.createElement('div');
@@ -1338,10 +1423,11 @@
       const liveBeds = +$('f-beds').value || p.beds || 0;
       const liveBaths = +$('f-baths').value || p.baths || 0;
       if(!layouts.length && liveUnits > 1){
-        // Auto-suggest: divide total beds/baths evenly across one grouped row
+        // Auto-suggest: divide total beds/baths evenly, one row per unit
+        // (not one grouped row) — each unit gets its own adjustable row.
         const b = liveBeds > 0 ? Math.round(liveBeds/liveUnits) : 2;
         const ba = liveBaths > 0 ? Math.round(liveBaths/liveUnits) : 1;
-        addUnitLayoutRow(b, ba, liveUnits, 0);
+        for(let i=0;i<liveUnits;i++) addUnitLayoutRow(b, ba, 1, 0);
       } else if(layouts.length){
         layouts.forEach(lu=>addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0));
       }
@@ -1369,6 +1455,9 @@
     }
 
     $('btn-cancel').addEventListener('click', ()=>{ slot.innerHTML=''; editingId=null; });
+    document.querySelectorAll('.f-down-quickset').forEach(pill=>{
+      pill.addEventListener('click', ()=>{ $('f-down').value = pill.dataset.val; });
+    });
     let pendingImageUrls = p.imageUrls || [];
     $('btn-zori-lookup').addEventListener('click', ()=>{
       const zip = $('f-zip').value.trim();
