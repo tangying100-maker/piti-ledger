@@ -564,11 +564,17 @@
           r.taxAssessed = r.taxAssessed ?? gdp.resoFacts.assessedValue ?? null;
         }
 
-        // Photos
+        // Photos — Zillow's actual field name/nesting for this varies (has
+        // changed over time and probably varies by listing type), so try a
+        // wide net of known shapes per photo rather than one fixed path.
         if(Array.isArray(gdp.photos)){
-          r.imageUrls = gdp.photos
-            .map(p => typeof p === 'string' ? p : (p.url || p.mixedUrl || p.captionedUrl))
-            .filter(Boolean);
+          r.imageUrls = gdp.photos.map(ph => {
+            if(typeof ph === 'string') return ph;
+            const jpeg = ph.mixedSources?.jpeg || ph.mixedSources?.webp;
+            const bestSized = Array.isArray(jpeg) ? jpeg[jpeg.length-1]?.url : null;
+            return ph.url || ph.mixedUrl || ph.captionedUrl || bestSized
+              || ph.hiResImageLink || ph.highResUrl || ph.url1024 || ph.url768 || null;
+          }).filter(Boolean);
         }
 
         // Multifamily units + rents + unit layouts
@@ -678,11 +684,17 @@
     if(!r.description && searchText) r.description = (metaM && metaM[1]) || wholePageText.slice(0, 2000);
 
     // --- Strategy 3: regex fallbacks ---
-    // Images from zillowstatic CDN
-    if(!r.imageUrls.length){
+    // Images from zillowstatic CDN — always run this and merge with whatever
+    // Strategy 1's structured extraction found (union, deduped), rather than
+    // only as a fallback when Strategy 1 found nothing. Zillow's photos JSON
+    // shape isn't guaranteed and a field-mapping miss there (wrong field name,
+    // all photos collapsing to one placeholder) would otherwise silently give
+    // just 1 duplicated image with no way to recover the rest.
+    {
       const imgRe = /https?:\/\/[^"'\s]*zillowstatic[^"'\s]*/gi;
-      const found = html.match(imgRe);
-      if(found) r.imageUrls = [...new Set(found)];
+      const found = html.match(imgRe) || [];
+      const isLikelyPhoto = u => !/icon|logo|sprite|avatar|badge|placeholder/i.test(u);
+      r.imageUrls = [...new Set([...r.imageUrls, ...found])].filter(isLikelyPhoto);
     }
 
     if(r.price == null){
