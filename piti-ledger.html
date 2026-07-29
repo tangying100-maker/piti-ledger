@@ -655,27 +655,27 @@
       if(zm) r.zip = zm[1];
     }
 
-    // --- Search text fallback for description-based detection below ---
-    // Strategy 4 (duplex/triplex + unit-layout text parsing) needs some text to
-    // search. If Strategy 1's JSON didn't give us a clean descriptionText (page
-    // structure varies, or __NEXT_DATA__ wasn't found at all), fall back to a
-    // meta description tag, or worst case the whole pasted text with HTML tags
-    // stripped — so unit detection still works even when the JSON extraction
-    // above failed entirely.
-    let searchText = r.description || '';
-    if(!searchText){
-      const metaM = html.match(/<meta[^>]*name=["']description["'][^>]*content="([^"]*)"/i)
-                 || html.match(/<meta[^>]*name=["']description["'][^>]*content='([^']*)'/i);
-      if(metaM) searchText = metaM[1];
-    }
-    if(!searchText){
-      searchText = html.replace(/<script[\s\S]*?<\/script>/gi, ' ')
-                        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-                        .replace(/<[^>]+>/g, ' ')
-                        .replace(/&amp;/g,'&').replace(/&nbsp;/g,' ')
-                        .slice(0, 20000); // cap for performance
-    }
-    if(!r.description && searchText) r.description = searchText.slice(0, 2000);
+    // --- Search text for description-based detection below ---
+    // Strategy 4 (duplex/triplex + unit-layout text parsing) needs text to
+    // search for keywords like "triplex". Zillow's page structure varies a lot
+    // between listings, and the __NEXT_DATA__ descriptionText we might have
+    // grabbed in Strategy 1 is not guaranteed to be the field that actually
+    // mentions "triplex"/unit breakdown — sometimes that text lives elsewhere
+    // on the page (a different JSON field, a facts panel, etc). Rather than
+    // trusting only the first source found, concatenate every source so a
+    // keyword scan below has the best chance of finding it wherever it is:
+    // the JSON descriptionText, the meta description tag, AND the whole
+    // visible page text with scripts/styles/tags stripped.
+    const metaM = html.match(/<meta[^>]*name=["']description["'][^>]*content="([^"]*)"/i)
+               || html.match(/<meta[^>]*name=["']description["'][^>]*content='([^']*)'/i);
+    const wholePageText = html.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+                               .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+                               .replace(/<[^>]+>/g, ' ')
+                               .replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').replace(/&#39;/g,"'").replace(/&rsquo;/g,"'")
+                               .replace(/\s+/g,' ')
+                               .slice(0, 60000); // cap for performance
+    const searchText = [r.description, metaM && metaM[1], wholePageText].filter(Boolean).join('\n\n');
+    if(!r.description && searchText) r.description = (metaM && metaM[1]) || wholePageText.slice(0, 2000);
 
     // --- Strategy 3: regex fallbacks ---
     // Images from zillowstatic CDN
