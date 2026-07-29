@@ -692,7 +692,13 @@
     // just 1 duplicated image with no way to recover the rest.
     {
       const imgRe = /https?:\/\/[^"'\s]*zillowstatic[^"'\s]*/gi;
-      const found = html.match(imgRe) || [];
+      // Raw HTML can contain the same URL JSON-escaped inside an embedded
+      // <script> blob (e.g. "https:\/\/photos.zillowstatic.com\/fp\/..."),
+      // since this scan runs on the unparsed page text, not JSON.parse'd
+      // data. A stray backslash breaks the URL (browser can't load it —
+      // shows as a broken/missing thumbnail), so strip escape backslashes;
+      // real URLs never legitimately contain one.
+      const found = (html.match(imgRe) || []).map(u => u.replace(/\\/g, ''));
       const isLikelyPhoto = u => !/icon|logo|sprite|avatar|badge|placeholder/i.test(u);
       r.imageUrls = [...new Set([...r.imageUrls, ...found])].filter(isLikelyPhoto);
     }
@@ -801,8 +807,25 @@
       else if(c.includes('phoenix')) r.city = 'Phoenix';
     }
 
-    // Deduplicate (no cap — a listing can have 70+ photos and she wants all of them)
-    r.imageUrls = [...new Set(r.imageUrls)];
+    // Deduplicate (no cap — a listing can have 70+ photos and she wants all of them).
+    // Zillow serves each real photo as several resolution/crop variants sharing
+    // one base filename (e.g. ".../fp/<hash>-cc_ft_768.jpg" and
+    // ".../fp/<hash>-uncropped_scaled_within_1536_1152.jpg" are the SAME photo)
+    // — exact-string dedup treats those as different images, which is why the
+    // gallery looked full of near-identical duplicates. Collapse by base
+    // filename (strip the trailing "-<sizecode>" segment) and keep only the
+    // largest variant found for each real photo.
+    {
+      const baseKey = u => u.split('?')[0].replace(/-[a-zA-Z0-9_]+\.(jpe?g|png|webp)$/i, '');
+      const sizeScore = u => { const n = u.match(/\d+/g); return n ? Math.max(...n.map(Number)) : 0; };
+      const bestByKey = new Map();
+      for(const u of r.imageUrls){
+        const key = baseKey(u);
+        const prev = bestByKey.get(key);
+        if(!prev || sizeScore(u) > sizeScore(prev)) bestByKey.set(key, u);
+      }
+      r.imageUrls = [...bestByKey.values()];
+    }
     return r;
   }
 
@@ -1682,6 +1705,13 @@
       const idx = properties.findIndex(x=>x.id===np.id);
       if(idx>=0) properties[idx]=np; else properties.push(np);
       saveProperties();
+      // Carry this rate forward as the default for the next new property —
+      // rates move often enough that re-typing it every time is annoying.
+      if(np.rate && np.rate !== assumptions.rate){
+        assumptions = {...assumptions, rate:np.rate};
+        saveAssumptions();
+        hydrateAssumptionFields();
+      }
       slot.innerHTML=''; editingId=null;
       render();
       toast('已保存');
