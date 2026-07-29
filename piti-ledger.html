@@ -406,22 +406,25 @@
   // reports (Jul 2026: 536 N Hall & 719 N Cherry & 545 W Ivyglen in Mesa,
   // Phoenix 85008, Tempe 85281 & 85283) using each report's per-listing
   // "Bldg Type" column — ~120 listings total. Pooled city-wide rather than
-  // per-ZIP: per-ZIP×type×bed cells are too sparse to be reliable (e.g. a
-  // single ZIP might have only 2-3 real 4BR house listings), and an earlier
-  // per-ZIP attempt silently fell back to the 2BR multiplier for any bed
-  // count a ZIP's apartment table didn't cover -- i.e. switching between
-  // "House"/"Apartment" for a 3-4BR property changed nothing.
-  // House curve (n=5/7/27/30 for 1/2/3/4BR): real 3-4BR rentals in this
-  // market are overwhelmingly single-family houses, so this curve has good
-  // sample sizes throughout.
+  // per-ZIP: per-ZIP×type×bed cells are too sparse to be reliable.
+  //
+  // Both curves are indexed to ONE shared anchor -- the pooled apartment 2BR
+  // median ($1,363) -- NOT to their own 2BR value. An earlier version
+  // normalized each curve to 1.00 at its own 2BR rate, which made house and
+  // apartment rent identical at 2BR *by construction*, hiding a real ~25%
+  // house premium the data actually shows even at the same bed count
+  // (2BR house pooled median $1,700 vs 2BR apartment $1,363). That's the
+  // exact case a 2-bed/1-bath duplex/fourplex unit lands in, so this bug
+  // made the house/apartment selector look like it did nothing for the most
+  // common multi-family unit size.
+  // House curve (n=5/7/27/30 for 1/2/3/4BR) has real medians throughout.
   // Apartment curve: 1-2BR are real per-type medians (n=25/24). 3-4BR
   // "apartment" listings are essentially nonexistent in the data (one real
-  // 3BR apartment data point total, at a ratio close to the house curve
-  // anyway) -- not enough to support an independent curve, so 3-4BR
-  // apartment borrows the house curve's shape rather than guessing or
-  // flatlining at the 2BR rate.
-  const RENT_MULT_HOUSE = {1:0.71, 2:1.00, 3:1.29, 4:1.50};
-  const RENT_MULT_APARTMENT = {1:0.85, 2:1.00, 3:1.29, 4:1.50};
+  // 3BR apartment data point total, close to the house number anyway) --
+  // not enough for an independent curve, so 3-4BR apartment borrows the
+  // house curve's value rather than guessing or flatlining at 2BR.
+  const RENT_MULT_HOUSE = {1:0.88, 2:1.25, 3:1.61, 4:1.87};
+  const RENT_MULT_APARTMENT = {1:0.85, 2:1.00, 3:1.61, 4:1.87};
   // Compatibility alias for code still referencing old name.
   const ZORI_BED_MULTIPLIER = RENT_MULT_APARTMENT;
   // Heuristic, not data-backed: extra bathrooms beyond 1 nudge rent up a bit.
