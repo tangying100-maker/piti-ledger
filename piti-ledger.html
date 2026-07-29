@@ -8,148 +8,212 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#16232E;
-    --ink-soft:#2A3A48;
-    --paper:#FBF8F2;
-    --paper-dim:#F1ECE1;
-    --line:#D8D0BE;
-    --brass:#B08947;
-    --brass-dim:#DCC79A;
-    --approve:#3F6E52;
-    --approve-bg:#E7EFE7;
-    --reject:#9C3B2E;
-    --reject-bg:#F4E7E3;
-    --slate:#5B6B7A;
+    --ink:#E2E8F0;
+    --ink-soft:#94A3B8;
+    --paper:#0B1220;
+    --paper-dim:#111A2E;
+    --surface:#0E1626;
+    --line:#1E293B;
+    --accent:#22D3EE;
+    --accent-dim:#67E8F9;
+    --accent-bg:rgba(34,211,238,0.08);
+    --approve:#34D399;
+    --approve-bg:rgba(52,211,153,0.09);
+    --reject:#F87171;
+    --reject-bg:rgba(248,113,113,0.09);
+    --slate:#64748B;
+    --card-shadow:0 0 0 1px rgba(34,211,238,0.05), 0 4px 20px rgba(0,0,0,0.45);
+    --card-shadow-hover:0 0 0 1px rgba(34,211,238,0.18), 0 8px 30px rgba(0,0,0,0.55), 0 0 24px rgba(34,211,238,0.12);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    background:var(--paper);
+    background:
+      linear-gradient(rgba(34,211,238,0.05) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, rgba(34,211,238,0.05) 1px, transparent 1px) 0 0/40px 40px,
+      radial-gradient(ellipse 80% 60% at 50% -10%, rgba(34,211,238,0.12), transparent),
+      linear-gradient(180deg, #05070D 0%, #060A14 50%, #05070D 100%);
+    background-attachment:fixed;
     color:var(--ink);
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
+    min-height:100vh;
   }
-  ::selection{background:var(--brass-dim);}
-  :focus-visible{outline:2px solid var(--brass); outline-offset:2px;}
+  ::selection{background:var(--accent); color:#05070D;}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 
-  .wrap{max-width:980px; margin:0 auto; padding:28px 20px 80px;}
+  .wrap{max-width:1040px; margin:0 auto; padding:24px 20px 80px;}
 
   /* ---------- Header ---------- */
   header{
     display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
-    border-bottom:3px solid var(--ink); padding-bottom:16px; margin-bottom:8px;
-    flex-wrap:wrap;
+    padding-bottom:20px; margin-bottom:20px; flex-wrap:wrap;
+    border-bottom:2px solid var(--line);
   }
   .brand-mark{
-    width:46px; height:46px; border:2px solid var(--ink); border-radius:50%;
+    width:46px; height:46px; border:2px solid var(--accent); border-radius:12px;
     display:flex; align-items:center; justify-content:center;
-    font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:12px;
-    letter-spacing:-0.5px; flex-shrink:0;
+    font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:11px;
+    letter-spacing:-0.5px; flex-shrink:0; color:var(--accent);
+    background:var(--accent-bg);
+    box-shadow:0 0 16px rgba(34,211,238,0.35), inset 0 0 8px rgba(34,211,238,0.15);
   }
   .brand{display:flex; align-items:center; gap:12px;}
   h1{
     font-family:'Roboto Slab',serif; font-weight:800; font-size:26px;
     margin:0; letter-spacing:-0.3px; line-height:1.1;
+    background:linear-gradient(135deg, var(--ink), var(--accent) 70%);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    background-clip:text;
+    filter:drop-shadow(0 0 18px rgba(34,211,238,0.25));
   }
   .sub{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--slate);
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--slate);
     margin-top:4px; text-transform:uppercase; letter-spacing:1px;
   }
   .rule-note{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink);
-    background:var(--paper-dim); border:1px solid var(--line); border-radius:3px;
-    padding:8px 12px; white-space:nowrap;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink);
+    background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    padding:8px 14px; white-space:nowrap; box-shadow:var(--card-shadow);
   }
-  .rule-note b{color:var(--brass);}
+  .rule-note b{color:var(--accent);}
 
   /* ---------- Assumptions bar ---------- */
   .assume{
-    margin-top:22px; border:1px solid var(--line); border-radius:6px; background:#fff;
+    margin-top:22px; border:1px solid var(--line); border-radius:10px; background:var(--surface);
+    box-shadow:var(--card-shadow);
   }
   .assume summary{
     cursor:pointer; padding:12px 16px; font-family:'IBM Plex Mono',monospace;
-    font-size:12px; text-transform:uppercase; letter-spacing:1.5px; color:var(--slate);
+    font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--slate);
     display:flex; align-items:center; justify-content:space-between;
   }
   .assume[open] summary{border-bottom:1px solid var(--line);}
   .assume-grid{
-    display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(155px,1fr)); gap:14px;
     padding:16px;
   }
   .field label{
-    display:block; font-size:11px; color:var(--slate); text-transform:uppercase;
+    display:block; font-size:10.5px; color:var(--slate); text-transform:uppercase;
     letter-spacing:0.6px; margin-bottom:5px; font-family:'IBM Plex Mono',monospace;
   }
   .field input, .field select, .field textarea{
-    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:4px;
-    font-family:'IBM Plex Mono',monospace; font-size:13px; background:var(--paper);
-    color:var(--ink);
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:13px; background:var(--paper-dim);
+    color:var(--ink); transition:border-color .15s,box-shadow .15s;
   }
-  .field input:focus, .field select:focus, .field textarea:focus{border-color:var(--brass);}
+  .field input:focus, .field select:focus, .field textarea:focus{
+    border-color:var(--accent); box-shadow:0 0 0 3px rgba(34,211,238,0.15);
+    background:var(--surface); outline:none;
+  }
+  .field select option{background:var(--paper-dim); color:var(--ink);}
 
   /* ---------- Add button ---------- */
   .add-row{margin:22px 0; display:flex; gap:10px; flex-wrap:wrap;}
   button{
     font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
-    border-radius:5px; border:1px solid var(--ink); padding:10px 16px;
-    cursor:pointer; background:var(--ink); color:var(--paper);
-    transition:transform .08s ease;
+    border-radius:7px; border:1px solid var(--line); padding:10px 16px;
+    cursor:pointer; background:var(--surface); color:var(--ink);
+    transition:transform .08s ease,box-shadow .15s,border-color .15s;
   }
+  button:hover{box-shadow:var(--card-shadow-hover); border-color:var(--accent);}
   button:active{transform:scale(0.98);}
   button.ghost{background:transparent; color:var(--ink); border:1px solid var(--line);}
-  button.small{padding:6px 11px; font-size:12px;}
-  button.brass{background:var(--brass); border-color:var(--brass); color:#fff;}
-  button:disabled{opacity:0.5; cursor:not-allowed;}
+  button.ghost:hover{background:var(--paper-dim);}
+  button.small{padding:6px 11px; font-size:12px; border-radius:5px;}
+  button.brass{background:var(--accent); border-color:var(--accent); color:#05070D; font-weight:700;
+    box-shadow:0 0 14px rgba(34,211,238,0.3);}
+  button.brass:hover{background:var(--accent-dim); box-shadow:0 0 20px rgba(34,211,238,0.5);}
+  button:disabled{opacity:0.4; cursor:not-allowed; box-shadow:none;}
 
   /* ---------- Form panel ---------- */
   .panel{
-    border:1px solid var(--ink); border-radius:6px; background:#fff; padding:20px;
-    margin-bottom:22px;
+    border:1px solid var(--line); border-radius:12px; background:var(--surface); padding:22px;
+    margin-bottom:22px; box-shadow:var(--card-shadow);
   }
   .panel h3{
-    font-family:'Roboto Slab',serif; font-size:17px; margin:0 0 14px;
+    font-family:'Roboto Slab',serif; font-size:17px; margin:0 0 16px;
+    color:var(--ink);
   }
   .grid2{display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:14px;}
   .field.full{grid-column:1/-1;}
-  .panel-actions{display:flex; gap:10px; margin-top:16px; justify-content:flex-end;}
+  .panel-actions{display:flex; gap:10px; margin-top:18px; justify-content:flex-end;}
   .comp-row{display:flex; gap:8px; margin-bottom:8px; align-items:center;}
   .comp-row input{flex:1;}
 
+  /* ---------- Unit layout editor ---------- */
+  .unit-layout-section{
+    margin-top:14px; padding:14px; border:1px solid var(--line); border-radius:8px;
+    background:var(--paper-dim);
+  }
+  .unit-layout-section h4{
+    font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--accent);
+    margin:0 0 10px; font-family:'IBM Plex Mono',monospace;
+  }
+  .unit-layout-row{
+    display:flex; gap:8px; margin-bottom:8px; align-items:center; flex-wrap:wrap;
+  }
+  .unit-layout-row input{width:64px;}
+  .unit-layout-row .ul-count{width:52px;}
+  .unit-layout-row .ul-pct{width:58px;}
+  .unit-layout-row .ul-label{
+    font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;
+    white-space:nowrap;
+  }
+  .unit-validation{
+    margin-top:8px; font-size:11px; font-family:'IBM Plex Mono',monospace;
+  }
+  .unit-validation.match{color:var(--approve);}
+  .unit-validation.mismatch{color:var(--reject);}
+  .ul-tier-pills{display:inline-flex; gap:4px;}
+  .pill.tiny{font-size:9.5px; padding:2px 7px;}
+
   /* ---------- Date header ---------- */
   .date-header{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--slate);
-    text-transform:uppercase; letter-spacing:1px; margin:20px 0 10px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--accent-dim);
+    text-transform:uppercase; letter-spacing:1px; margin:20px 0 12px;
     padding-bottom:6px; border-bottom:1px solid var(--line);
   }
   .date-header:first-child{margin-top:0;}
 
   /* ---------- Empty state ---------- */
   .empty{
-    text-align:center; padding:60px 20px; color:var(--slate); border:1px dashed var(--line);
-    border-radius:6px; font-family:'IBM Plex Mono',monospace; font-size:13px;
+    text-align:center; padding:60px 20px; color:var(--slate);
+    border:1px dashed var(--line); border-radius:10px;
+    font-family:'IBM Plex Mono',monospace; font-size:13px;
+    background:var(--surface);
   }
 
   /* ---------- Property card ---------- */
   .card{
-    border:1px solid var(--line); border-radius:6px; background:#fff; margin-bottom:16px;
-    overflow:hidden; position:relative;
+    border:1px solid var(--line); border-radius:12px; background:var(--surface);
+    margin-bottom:16px; overflow:hidden; position:relative;
+    box-shadow:var(--card-shadow); transition:box-shadow .2s,border-color .2s;
   }
+  .card:hover{box-shadow:var(--card-shadow-hover); border-color:rgba(34,211,238,0.3);}
   .card-top{
     display:flex; justify-content:space-between; align-items:flex-start; gap:14px;
-    padding:16px 18px 12px; border-bottom:1px solid var(--paper-dim); flex-wrap:wrap;
+    padding:16px 20px 12px; border-bottom:1px solid var(--paper-dim); flex-wrap:wrap;
   }
-  .card-addr{font-family:'Roboto Slab',serif; font-weight:600; font-size:17px;}
+  .card-addr{font-family:'Roboto Slab',serif; font-weight:600; font-size:17px; color:var(--ink);}
   .card-city{font-size:12px; color:var(--slate); margin-top:2px;}
+  .property-badge{
+    display:inline-block; font-size:10px; padding:2px 7px; border-radius:10px;
+    font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:0.5px;
+    font-weight:600; vertical-align:middle; margin-left:6px;
+  }
+  .property-badge.mf{background:var(--accent-bg); color:var(--accent); border:1px solid var(--accent-dim);}
+  .property-badge.sfh{background:rgba(96,165,250,0.1); color:#60A5FA; border:1px solid rgba(96,165,250,0.35);}
   .stamp{
-    display:inline-block; border:3px double currentColor; border-radius:4px;
-    padding:5px 14px; transform:rotate(-6deg); font-family:'IBM Plex Mono',monospace;
-    text-transform:uppercase; letter-spacing:2px; font-weight:700; font-size:12px;
+    display:inline-block; border:3px double currentColor; border-radius:6px;
+    padding:5px 14px; transform:rotate(-5deg); font-family:'IBM Plex Mono',monospace;
+    text-transform:uppercase; letter-spacing:2px; font-weight:700; font-size:11px;
     white-space:nowrap;
   }
-  .stamp.approve{color:var(--approve); background:var(--approve-bg);}
-  .stamp.reject{color:var(--reject); background:var(--reject-bg);}
+  .stamp.approve{color:var(--approve); background:var(--approve-bg); box-shadow:0 0 14px rgba(52,211,153,0.25);}
+  .stamp.reject{color:var(--reject); background:var(--reject-bg); box-shadow:0 0 14px rgba(248,113,113,0.2);}
 
-  .card-body{padding:14px 18px 18px; display:grid; grid-template-columns:1.1fr 1fr; gap:20px;}
+  .card-body{padding:14px 20px 18px; display:grid; grid-template-columns:1.1fr 1fr; gap:20px;}
   @media (max-width:640px){ .card-body{grid-template-columns:1fr;} }
 
   .ledger-table{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:13px;}
@@ -157,61 +221,128 @@
   .ledger-table tr:last-child{border-bottom:none;}
   .ledger-table td{padding:5px 0;}
   .ledger-table td:last-child{text-align:right; font-weight:600;}
-  .ledger-table tr.total td{border-top:1.5px solid var(--ink); padding-top:8px; font-weight:700;}
+  .ledger-table tr.total td{border-top:1.5px solid var(--accent); padding-top:8px; font-weight:700;}
 
   .margin-box{
-    border-radius:5px; padding:12px 14px; font-family:'IBM Plex Mono',monospace;
+    border-radius:8px; padding:12px 14px; font-family:'IBM Plex Mono',monospace;
+    border:1px solid transparent;
   }
-  .margin-box.approve{background:var(--approve-bg); color:var(--approve);}
-  .margin-box.reject{background:var(--reject-bg); color:var(--reject);}
+  .margin-box.approve{background:var(--approve-bg); color:var(--approve); border-color:rgba(52,211,153,0.25);}
+  .margin-box.reject{background:var(--reject-bg); color:var(--reject); border-color:rgba(248,113,113,0.25);}
   .margin-box .big{font-size:20px; font-weight:700;}
   .margin-box .cap{font-size:11px; text-transform:uppercase; letter-spacing:1px; opacity:0.85;}
 
   .rent-block{margin-top:12px;}
   .rent-block h4{
-    font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--slate);
+    font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:var(--slate);
     margin:0 0 8px; font-family:'IBM Plex Mono',monospace;
   }
   .tier-pills{display:flex; gap:6px; flex-wrap:wrap;}
   .pill{
-    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:4px 9px;
-    border:1px solid var(--line); border-radius:20px; cursor:pointer; background:#fff;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:4px 9px;
+    border:1px solid var(--line); border-radius:20px; cursor:pointer; background:var(--paper-dim);
+    color:var(--ink-soft);
+    transition:all .15s;
   }
-  .pill.active{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+  .pill:hover{border-color:var(--accent); color:var(--ink);}
+  .pill.active{background:var(--accent); color:#05070D; border-color:var(--accent); font-weight:600;}
+
+  /* Unit breakdown on card */
+  .unit-breakdown{
+    margin-top:12px; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+  }
+  .unit-breakdown .ub-header{
+    background:var(--accent-bg); padding:8px 12px; font-size:10.5px;
+    text-transform:uppercase; letter-spacing:1px; color:var(--accent);
+    font-family:'IBM Plex Mono',monospace; font-weight:600;
+  }
+  .unit-breakdown .ub-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 12px; border-bottom:1px solid var(--paper-dim);
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+  }
+  .unit-breakdown .ub-row:last-child{border-bottom:none;}
+  .unit-breakdown .ub-row .ub-type{
+    font-weight:600; white-space:nowrap;
+  }
+  .unit-breakdown .ub-row .ub-rent{color:var(--ink-soft); white-space:nowrap;}
+  .unit-breakdown .ub-total{
+    padding:8px 12px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+    font-weight:700; text-align:right; border-top:1px solid var(--line);
+    background:var(--paper-dim);
+  }
 
   .ai-box{
-    margin-top:10px; border:1px dashed var(--brass); border-radius:5px; padding:10px 12px;
-    font-size:12.5px; background:#FFFDF8;
+    margin-top:10px; border:1px dashed var(--accent); border-radius:8px;
+    padding:10px 12px; font-size:12.5px; background:var(--accent-bg);
   }
-  .ai-box .verdict{font-weight:700; color:var(--brass); font-family:'IBM Plex Mono',monospace; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;}
+  .ai-box .verdict{font-weight:700; color:var(--accent); font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;}
   .ai-box p{margin:6px 0 0; line-height:1.5; color:var(--ink-soft);}
 
   .card-footer{
-    padding:10px 18px; background:var(--paper-dim); display:flex; gap:8px;
+    padding:10px 20px; background:var(--paper-dim); display:flex; gap:8px;
     justify-content:flex-end; flex-wrap:wrap; border-top:1px solid var(--line);
   }
-  .thumb{max-width:120px; max-height:80px; border-radius:4px; border:1px solid var(--line); margin-top:8px; display:block;}
+  .thumb{max-width:120px; max-height:80px; border-radius:6px; border:1px solid var(--line); margin-top:8px; display:block;}
   .file-label{
-    display:inline-block; font-size:12px; border:1px solid var(--line); border-radius:4px;
+    display:inline-block; font-size:11.5px; border:1px solid var(--line); border-radius:5px;
     padding:6px 10px; cursor:pointer; font-family:'IBM Plex Mono',monospace;
+    transition:border-color .15s;
   }
-  .file-label:hover{border-color:var(--brass);}
+  .file-label:hover{border-color:var(--accent);}
   input[type=file]{display:none;}
 
   .toast{
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-    background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:6px;
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--surface); color:var(--accent-dim); padding:10px 20px; border-radius:8px;
     font-size:13px; font-family:'IBM Plex Mono',monospace; opacity:0; pointer-events:none;
     transition:opacity .25s ease; z-index:50;
+    border:1px solid var(--accent); box-shadow:0 0 20px rgba(34,211,238,0.3), 0 4px 12px rgba(0,0,0,0.4);
   }
   .toast.show{opacity:1;}
   .spinner{
-    display:inline-block; width:12px; height:12px; border:2px solid var(--brass-dim);
-    border-top-color:var(--brass); border-radius:50%; animation:spin .7s linear infinite;
+    display:inline-block; width:12px; height:12px; border:2px solid var(--accent-dim);
+    border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite;
     vertical-align:middle; margin-right:6px;
   }
   @keyframes spin{to{transform:rotate(360deg);}}
   @media (prefers-reduced-motion:reduce){ .spinner{animation:none;} }
+
+  /* ---------- Zillow paste tabs ---------- */
+  .zillow-tabs{display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;}
+  .zillow-tab{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:6px 12px;
+    border:1px solid var(--line); border-radius:5px; cursor:pointer; background:var(--paper-dim);
+    color:var(--slate); text-transform:uppercase; letter-spacing:0.5px;
+    transition:all .15s;
+  }
+  .zillow-tab:hover{color:var(--accent); border-color:var(--accent);}
+  .zillow-tab.active{background:var(--accent); color:#05070D; border-color:var(--accent); font-weight:600;}
+
+  /* ---------- Image preview grid (form) ---------- */
+  .img-preview-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(72px,1fr)); gap:5px;
+    margin-top:10px; max-height:180px; overflow-y:auto;
+  }
+  .img-preview-grid img{
+    width:100%; height:54px; object-fit:cover; border-radius:5px; border:1px solid var(--line);
+    cursor:pointer; transition:transform .1s;
+  }
+  .img-preview-grid img:hover{transform:scale(1.08); border-color:var(--accent);}
+
+  /* ---------- Card image gallery ---------- */
+  .card-images{
+    display:flex; gap:5px; overflow-x:auto; margin-top:10px; padding-bottom:4px;
+  }
+  .card-images img{
+    height:56px; width:84px; object-fit:cover; border-radius:5px; border:1px solid var(--line);
+    flex-shrink:0; cursor:pointer;
+  }
+  .card-images img:hover{border-color:var(--accent);}
+  .ai-batch-box{
+    margin-top:10px; border:1px dashed var(--accent); border-radius:8px;
+    padding:10px 12px; font-size:12.5px; background:var(--accent-bg);
+  }
 </style>
 </head>
 <body>
@@ -357,6 +488,244 @@
     return {street, city: cityFound, zip};
   }
 
+  // ---------- Zillow page HTML parser ----------
+  // Parses pasted page-source HTML to extract every field we need:
+  // address, price, beds, baths, sqft, units, tax, per-unit rents,
+  // total rent, and all photo URLs — using multiple strategies.
+  function parseZillowHtml(html){
+    const r = {
+      address:null, city:null, zip:null, state:null,
+      price:null, beds:null, baths:null, sqft:null, units:null,
+      yearBuilt:null, lotSize:null, homeType:null, propertyType:null,
+      taxAnnual:null, taxAssessed:null,
+      rentZestimate:null, unitRents:[], totalRent:null,
+      imageUrls:[], description:null,
+      unitLayouts:[]  // [{beds, baths, count}] — parsed from Zillow data
+    };
+
+    // --- Strategy 1: __NEXT_DATA__ JSON blob ---
+    let nd = null;
+    const ndMatch = html.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+    if(ndMatch){ try{ nd = JSON.parse(ndMatch[1]); }catch(e){ /* malformed */ } }
+
+    if(nd){
+      const gdp = nd?.props?.pageProps?.gdp || nd?.props?.pageProps?.cachePayload?.gdp;
+      if(gdp){
+        const b = gdp.building || {};
+        r.beds = b.bedrooms ?? r.beds;
+        r.baths = b.bathrooms ?? b.bathsFull ?? r.baths;
+        r.sqft = b.livingArea ?? r.sqft;
+        r.yearBuilt = b.yearBuilt ?? r.yearBuilt;
+        r.lotSize = b.lotSize ?? r.lotSize;
+        r.homeType = b.homeType ?? r.homeType;
+
+        // Address
+        const a = gdp.address || b.address;
+        if(a){
+          r.address = a.streetAddress || a.streetAddressTop || r.address;
+          r.city = a.city || r.city;
+          r.zip = a.zipcode || a.zip || r.zip;
+          r.state = a.state || r.state;
+        }
+
+        // Price
+        r.price = gdp.price ?? b.price ?? r.price;
+        r.rentZestimate = b.rentZestimate ?? gdp.rentZestimate ?? r.rentZestimate;
+
+        // Tax history (most recent entry)
+        if(Array.isArray(gdp.taxHistory) && gdp.taxHistory.length){
+          const latest = gdp.taxHistory[0];
+          r.taxAnnual = latest.taxPaid ?? r.taxAnnual;
+          r.taxAssessed = latest.taxAssessedValue ?? r.taxAssessed;
+        }
+        // resoFacts fallback
+        if(gdp.resoFacts){
+          r.taxAnnual = r.taxAnnual ?? gdp.resoFacts.taxAnnualAmount ?? null;
+          r.taxAssessed = r.taxAssessed ?? gdp.resoFacts.assessedValue ?? null;
+        }
+
+        // Photos
+        if(Array.isArray(gdp.photos)){
+          r.imageUrls = gdp.photos
+            .map(p => typeof p === 'string' ? p : (p.url || p.mixedUrl || p.captionedUrl))
+            .filter(Boolean);
+        }
+
+        // Multifamily units + rents + unit layouts
+        if(Array.isArray(gdp.units) && gdp.units.length){
+          r.units = gdp.units.length;
+          // Prefer actual listed/current rent over Zillow's own algorithmic
+          // zestimate guess — real numbers should win over an estimate.
+          r.unitRents = gdp.units
+            .map(u => u.rent || u.zestimate || u.rentZestimate || null)
+            .filter(v => v != null);
+          if(r.unitRents.length){
+            r.totalRent = r.unitRents.reduce((s,v)=>s+v, 0);
+          }
+          // Extract unit layouts: beds/baths per unit
+          const rawLayouts = gdp.units.map(u => ({
+            beds: u.bedrooms ?? u.beds ?? null,
+            baths: u.bathrooms ?? u.bathsFull ?? u.baths ?? null
+          }));
+          // Group identical layouts
+          const layoutMap = {};
+          for(const lu of rawLayouts){
+            if(lu.beds == null && lu.baths == null) continue;
+            const key = `${lu.beds ?? '?'}b${lu.baths ?? '?'}`;
+            if(!layoutMap[key]) layoutMap[key] = {beds:lu.beds, baths:lu.baths, count:0};
+            layoutMap[key].count++;
+          }
+          r.unitLayouts = Object.values(layoutMap);
+        }
+
+        // Detect propertyType from homeType
+        if(r.homeType){
+          const ht = String(r.homeType).toLowerCase().replace(/[_-]/g,'');
+          if(/multifamily|multiple|multi/.test(ht)) r.propertyType = 'multifamily';
+          else if(/duplex/.test(ht)) r.propertyType = 'multifamily';
+          else if(/triplex/.test(ht)) r.propertyType = 'multifamily';
+          else if(/fourplex|quad/.test(ht)) r.propertyType = 'multifamily';
+          else if(/five/.test(ht)) r.propertyType = 'multifamily';
+          else if(/condo|apartment|townhouse/.test(ht)) r.propertyType = 'multifamily';
+          else if(/singlefamily|single/.test(ht)) r.propertyType = 'single_family';
+        }
+        // Fallback: if units > 1, assume multifamily
+        if(!r.propertyType && r.units && r.units > 1) r.propertyType = 'multifamily';
+        if(!r.propertyType) r.propertyType = 'single_family';
+
+        // If we got unit layouts, auto-verify against total beds/baths
+        if(r.unitLayouts.length && r.beds != null && r.baths != null){
+          const sumBeds = r.unitLayouts.reduce((s,l)=>s+(l.beds||0)*(l.count||1),0);
+          const sumBaths = r.unitLayouts.reduce((s,l)=>s+(l.baths||0)*(l.count||1),0);
+          if(sumBeds !== r.beds || sumBaths !== r.baths){
+            // Mismatch — keep the total, but flag it
+            r._bedVerify = {total:r.beds, fromLayouts:sumBeds, match:false};
+            r._bathVerify = {total:r.baths, fromLayouts:sumBaths, match:false};
+          }
+        }
+
+        // Description
+        r.description = gdp.descriptionText || b.descriptionText || r.description;
+      }
+    }
+
+    // --- Strategy 2: JSON-LD blocks ---
+    const ldMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    if(ldMatches){
+      ldMatches.forEach(m => {
+        const inner = m.replace(/<script[^>]*>/i,'').replace(/<\/script>/i,'');
+        try{
+          const d = JSON.parse(inner);
+          if(d.image){
+            const imgs = Array.isArray(d.image) ? d.image : [d.image];
+            imgs.forEach(u => { if(typeof u === 'string' && !r.imageUrls.includes(u)) r.imageUrls.push(u); });
+          }
+          if(d.offers?.price && !r.price) r.price = +d.offers.price;
+          if(d.name && !r.address){
+            const parts = d.name.split(',');
+            if(parts.length >= 3) r.address = parts[0].trim();
+          }
+        }catch(e){ /* skip */ }
+      });
+    }
+
+    // --- Strategy 3: regex fallbacks ---
+    // Images from zillowstatic CDN
+    if(!r.imageUrls.length){
+      const imgRe = /https?:\/\/[^"'\s]*zillowstatic[^"'\s]*/gi;
+      const found = html.match(imgRe);
+      if(found) r.imageUrls = [...new Set(found)];
+    }
+
+    if(r.price == null){
+      const m = html.match(/\$(\d[\d,]*)\s*(?:\/mo|\/month)?/);
+      if(m) r.price = +(m[1].replace(/,/g,''));
+    }
+    if(r.beds == null){
+      const m = html.match(/(\d+)\s*(?:bd|bed(?:room)?s?)\b/i);
+      if(m) r.beds = +m[1];
+    }
+    if(r.baths == null){
+      const m = html.match(/(\d+(?:\.\d+)?)\s*(?:ba|bath(?:room)?s?)\b/i);
+      if(m) r.baths = +m[1];
+    }
+    if(r.sqft == null){
+      const m = html.match(/(\d[\d,]*)\s*(?:sqft|sq\.?\s*ft|square\s*feet)\b/i);
+      if(m) r.sqft = +(m[1].replace(/,/g,''));
+    }
+
+    // NOTE: There used to be a fallback here that regex-matched ANY "$X/mo" string
+    // anywhere in the page (ads, mortgage calculators, unrelated "similar homes"
+    // widgets, other listings' rent zestimates). That's exactly what was producing
+    // inaccurate comps — it has no way to tell "this property's rent" from noise
+    // elsewhere on the page. Removed. Real per-unit rents now come only from
+    // Strategy 1's structured gdp.units data (Zillow's own JSON, reliable) or
+    // explicit description-text parsing below. Everything else falls through to
+    // the calibrated ZORI model, which is more consistently accurate than noise.
+    // Single rent zestimate fallback
+    if(!r.totalRent && r.rentZestimate){
+      r.totalRent = r.rentZestimate;
+      r.unitRents = [r.rentZestimate];
+    }
+
+    // --- Strategy 4: multifamily detection from description text ---
+    // Look for keywords like "duplex", "triplex", "4-plex", "five units" etc.
+    // and try to infer unit layout.
+    if(!r.propertyType || !r.unitLayouts.length){
+      const desc = (r.description || '').toLowerCase();
+      // Detect unit count from keywords
+      let detectedUnits = null;
+      const mfPatterns = [
+        ['fourplex', 4], ['four-plex', 4], ['4-plex', 4], ['quadplex', 4], ['quadruplex', 4],
+        ['4 unit', 4], ['four unit', 4], ['4 family', 4],
+        ['triplex', 3], ['tri-plex', 3], ['3-plex', 3],
+        ['3 unit', 3], ['three unit', 3], ['3 family', 3], ['triple', 3],
+        ['duplex', 2], ['du-plex', 2], ['2-plex', 2],
+        ['2 unit', 2], ['two unit', 2], ['2 family', 2], ['double', 2],
+        ['fiveplex', 5], ['5-plex', 5], ['5 unit', 5], ['five unit', 5],
+        ['6-plex', 6], ['sixplex', 6], ['6 unit', 6], ['six unit', 6],
+        ['8-plex', 8], ['8 unit', 8], ['eight unit', 8],
+        ['multi-family', null], ['multifamily', null], ['multi family', null],
+      ];
+      for(const [kw, n] of mfPatterns){
+        if(desc.includes(kw)){
+          if(n != null) detectedUnits = n;
+          r.propertyType = r.propertyType || 'multifamily';
+          break;
+        }
+      }
+      if(detectedUnits != null && r.units == null) r.units = detectedUnits;
+
+      // Try to parse unit layout from text like "each unit 2 bed 1 bath" or "2b1b per unit"
+      if(detectedUnits && !r.unitLayouts.length){
+        const layoutMatch = desc.match(/(?:each|per)\s*(?:unit|apt|apartment)?[^.]*?(\d)\s*(?:bed|bd|br)(?:room)?s?\s*(?:and|&|,)?\s*(\d)\s*(?:bath|ba)(?:room)?s?/i) ||
+                            desc.match(/(\d)\s*br?\s*(?:\/|,|\s*and\s*)\s*(\d)\s*ba\b/i) ||
+                            desc.match(/(\d)\s*b(?:ed)?(?:room)?\s*\/?\s*(\d)\s*b(?:ath)?(?:room)?\s*(?:per|each|\bunit\b|\bapt\b)/i);
+        if(layoutMatch){
+          r.unitLayouts = [{beds:+layoutMatch[1], baths:+layoutMatch[2], count:detectedUnits}];
+        }
+      }
+    }
+
+    // City normalization
+    if(r.city){
+      const c = r.city.toLowerCase();
+      if(c.includes('mesa')) r.city = 'Mesa';
+      else if(c.includes('tempe')) r.city = 'Tempe';
+      else if(c.includes('phoenix')) r.city = 'Phoenix';
+    }
+
+    // Deduplicate & limit images
+    r.imageUrls = [...new Set(r.imageUrls)].slice(0, 40);
+    return r;
+  }
+
+  // NOTE: There is deliberately no automated Zillow page-fetch function here.
+  // Zillow's terms prohibit automated/bot access to the site. The "粘贴页面源码"
+  // tab covers this legitimately instead: you manually view-source/copy a page
+  // you're already looking at, and parseZillowHtml() below just parses that text
+  // locally — no network request to Zillow is ever made by this app.
+
   async function rentcastGet(path, key){
     const res = await fetch('https://api.rentcast.io' + path, { headers: { 'X-Api-Key': key, 'Accept': 'application/json' } });
     if(!res.ok) throw new Error('RentCast ' + path + ' -> HTTP ' + res.status);
@@ -408,8 +777,33 @@
     return Math.round(rent);
   }
 
+  // Per-unit rent estimate for multifamily — always uses 'apartment' type (no house premium)
+  function estimateUnitRent(zip, beds, baths){
+    const base = ZORI_BASELINE[zip];
+    if(!base) return null;
+    let rent = base;
+    const bedKey = Math.min(4, Math.max(1, Math.round(beds) || 2));
+    rent *= ZORI_BED_MULTIPLIER[bedKey];
+    const extraBaths = Math.max(0, (baths || 1) - 1);
+    rent *= (1 + extraBaths * ZORI_BATH_ADJUST_PER_EXTRA);
+    return Math.round(rent);
+  }
+
   function applyZoriFallback(zip){
     const propType = $('f-proptype') ? $('f-proptype').value : 'house';
+    // For multifamily with unit layouts, do per-unit estimation
+    const unitLayouts = getFormUnitLayouts();
+    if(unitLayouts.length && ($('f-units').value|0) > 1){
+      let total = 0;
+      for(const lu of unitLayouts){
+        const uRent = estimateUnitRent(zip, lu.beds||2, lu.baths||1);
+        if(uRent) total += uRent * (lu.count||1);
+      }
+      if(total){
+        $('f-manual-rent').value = total;
+        return true;
+      }
+    }
     const beds = +$('f-beds').value || 2;
     const baths = +$('f-baths').value || 1;
     const rent = estimateZoriRent(zip, propType, beds, baths);
@@ -419,11 +813,6 @@
   }
 
   // ---------- Maricopa County Assessor lookup ----------
-  // Note: the Assessor site's actual data loads via an internal AJAX call tied to
-  // session state set up during full page load; it can't be queried directly via
-  // fetch (consistently returns 500 even same-origin). So instead of pretending to
-  // auto-fetch, this opens their search pre-filled so the number can be copied over
-  // in one click.
   function assessorSearchUrl(street, city){
     return `https://mcassessor.maricopa.gov/mcs/?q=${encodeURIComponent(street + ' ' + city)}`;
   }
@@ -437,18 +826,57 @@
     if(r === 0) pi = loan/n;
     else pi = loan * r / (1 - Math.pow(1+r, -n));
     const taxBase = p.assessedValue || p.price;
-    const tax = taxBase * p.tax/100 / 12;
+    const tax = p.taxAnnual ? p.taxAnnual / 12 : taxBase * p.tax/100 / 12;
     const ins = p.price * p.ins/100 / 12;
     const hoa = p.hoa || 0;
     return {pi, tax, ins, hoa, total: pi+tax+ins+hoa};
   }
+
+  // Multi-family: per-unit-layout rent estimation using ZORI lookup table.
+  // Each unit layout gets its own base rent (ZIP × bed multiplier), own adjustment
+  // percentage, then total = sum(count × adjusted rent per layout).
+  // SFH or multifamily without layouts: falls back to comp average × unit count.
   function estimateRent(p){
+    const unitLayouts = (p.unitLayouts && p.unitLayouts.length) ? p.unitLayouts : [];
+    const isMf = p.propertyType === 'multifamily' || ((p.units||1) > 1);
+
+    if(isMf && unitLayouts.length){
+      const zip = p.zip || '';
+      const details = [];
+      let totalRent = 0, totalBaseRent = 0;
+      for(const lu of unitLayouts){
+        const perUnitBase = estimateUnitRent(zip, lu.beds||2, lu.baths||1) || 0;
+        const adjustPct = lu.rentAdjustPct ?? p.rentAdjustPct ?? 0;
+        const perUnitAdj = Math.round(perUnitBase * (1 + adjustPct/100));
+        const count = lu.count || 1;
+        details.push({
+          beds: lu.beds, baths: lu.baths, count,
+          perUnitBase, perUnitAdj, adjustPct,
+          groupTotal: perUnitAdj * count
+        });
+        totalBaseRent += perUnitBase * count;
+        totalRent += perUnitAdj * count;
+      }
+      // If comps also exist, blend: ZORI 60% / comps 40%
+      const comps = (p.comps||[]).filter(c=>c>0);
+      if(comps.length){
+        const compAvg = comps.reduce((a,b)=>a+b,0)/comps.length;
+        const compTotal = compAvg * (p.units||1);
+        totalRent = Math.round(totalRent * 0.6 + compTotal * 0.4);
+      }
+      return {
+        base: totalBaseRent, adj: totalRent, units: p.units||1, total: totalRent,
+        unitDetails: details, isPerUnit: true
+      };
+    }
+
+    // SFH or simple multifamily fallback
     const comps = (p.comps||[]).filter(c=>c>0);
     const base = comps.length ? comps.reduce((a,b)=>a+b,0)/comps.length : (p.manualRent||0);
     const adj = base * (1 + (p.rentAdjustPct||0)/100);
     const units = p.units || 1;
     const total = adj * units;
-    return {base, adj, units, total};
+    return {base, adj, units, total, isPerUnit: false};
   }
 
   // ---------- render list ----------
@@ -507,28 +935,52 @@
             <tr><td>HOA /月</td><td>${fmt(piti.hoa)}</td></tr>
             <tr class="total"><td>PITI 合计</td><td>${fmt(piti.total)}</td></tr>
           </table>
-          ${p.assessedValue ? `<div style="margin-top:8px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">${p.assessorInfo ? escapeHtml(p.assessorInfo) : `地税按评估值 ${fmt(p.assessedValue)} 计算`}</div>` : ''}
+          ${p.assessedValue || p.taxAnnual ? `<div style="margin-top:8px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">${p.taxAnnual ? `年地税 ${fmt(p.taxAnnual)}（从 Zillow 提取，/12 计月）` : (p.assessorInfo ? escapeHtml(p.assessorInfo) : `地税按评估值 ${fmt(p.assessedValue)} 计算`)}</div>` : ''}
         </div>
         <div>
           <div class="rent-block">
             <h4>租金估算</h4>
-            <div style="font-family:'IBM Plex Mono',monospace; font-size:13px;">
-              comps 均值 ${fmt(rent.base)} → 装修调整后 <b>${fmt(rent.adj)}</b>${rent.units>1?`/unit × ${rent.units} units = <b>${fmt(rent.total)}</b>/mo`:''}
-            </div>
-            <div class="tier-pills" style="margin-top:8px;">
-              <span class="pill ${p.tier==='old'?'active':''}" data-tier="old">老旧 −5%</span>
-              <span class="pill ${p.tier==='updated'?'active':''}" data-tier="updated">一般/翻新中 +0%</span>
-              <span class="pill ${p.tier==='new'?'active':''}" data-tier="new">全新装修 +12%</span>
-            </div>
+            ${rent.isPerUnit ? `
+              <div class="unit-breakdown">
+                <div class="ub-header">按户型分别估算（ZIP 基准 × 户型系数 × 装修调整）</div>
+                ${rent.unitDetails.map(ud => `
+                  <div class="ub-row">
+                    <span class="ub-type">${ud.beds}b${ud.baths}ba × ${ud.count}户 ${ud.adjustPct?`(${ud.adjustPct>0?'+':''}${ud.adjustPct}%)`:''}</span>
+                    <span class="ub-rent">${fmt(ud.perUnitAdj)}/户 → ${fmt(ud.groupTotal)}</span>
+                  </div>
+                `).join('')}
+                <div class="ub-total">合计 ${fmt(rent.total)}/mo</div>
+              </div>
+              <div style="margin-top:6px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">户型与装修调整在"编辑"里按户设置</div>
+            ` : `
+              <div style="font-family:'IBM Plex Mono',monospace; font-size:13px;">
+                comps 均值 ${fmt(rent.base)} → 装修调整后 <b>${fmt(rent.adj)}</b>${rent.units>1?`/unit × ${rent.units} units = <b>${fmt(rent.total)}</b>/mo`:''}
+              </div>
+              <div class="tier-pills" style="margin-top:8px;">
+                <span class="pill ${p.tier==='old'?'active':''}" data-tier="old">老旧 −5%</span>
+                <span class="pill ${p.tier==='updated'?'active':''}" data-tier="updated">一般/翻新中 +0%</span>
+                <span class="pill ${p.tier==='new'?'active':''}" data-tier="new">全新装修 +12%</span>
+              </div>
+            `}
           </div>
           <div class="margin-box ${pass?'approve':'reject'}" style="margin-top:12px;">
             <div class="cap">租金×0.7 − PITI</div>
             <div class="big">${margin>=0?'+':''}${fmt(margin)} /月</div>
           </div>
           <div style="margin-top:10px;">
-            <label class="file-label">📷 上传照片 → AI 评估装修
-              <input type="file" accept="image/*" class="ai-file">
-            </label>
+            ${(p.imageUrls&&p.imageUrls.length) ? `
+              <div class="card-images">
+                ${p.imageUrls.slice(0,12).map(u=>`<img src="${escapeHtml(u)}" loading="lazy" onerror="this.style.display='none'">`).join('')}
+              </div>
+            ` : ''}
+            <div class="ai-batch-result">
+              ${p.aiAnalyzed ? `<div class="ai-batch-box"><span class="verdict">AI 判断：${({old:'老旧',updated:'一般/翻新中',new:'全新装修'})[p.tier]||p.tier}（建议租金调整 ${p.rentAdjustPct>0?'+':''}${p.rentAdjustPct}%）</span><p>${escapeHtml(p.aiReason||'')}</p></div>` : ''}
+            </div>
+            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <label class="file-label">📷 上传照片 → AI 评估装修
+                <input type="file" accept="image/*" class="ai-file">
+              </label>
+            </div>
             <div class="ai-result"></div>
           </div>
         </div>
@@ -617,6 +1069,14 @@
     return extractJson(textBlock.text);
   }
 
+  // NOTE: There is deliberately no batch/automated photo-analysis function here.
+  // Earlier versions of this file fetched extracted Zillow photo URLs (via CORS
+  // proxy for Gemini, or directly for Anthropic's URL-based image input) — that's
+  // still automated, at-scale access to Zillow's CDN, so it's removed. Photos
+  // extracted from a manually-pasted page source are shown inline (a plain <img
+  // src>, same as any embedded web image) — analysis stays manual: download a
+  // photo yourself and upload it below.
+
   async function handleAIAnalyze(e, p, card){
     const file = e.target.files[0];
     if(!file) return;
@@ -672,11 +1132,14 @@
   function openForm(existing){
     editingId = existing ? existing.id : null;
     const p = existing || {
-      id: uid(), address:'', city:'Mesa', zip:'', propType:'house', assessedValue:0, assessorInfo:'', price:300000,
+      id: uid(), address:'', city:'Mesa', zip:'', propType:'house', propertyType:'single_family',
+      homeType:'', assessedValue:0, assessorInfo:'', price:300000,
       down:assumptions.down, rate:assumptions.rate, term:assumptions.term,
       tax:assumptions.tax, ins:assumptions.ins, hoa:assumptions.hoa,
       comps:[null,null,null], manualRent:0, tier:'updated', rentAdjustPct:0,
       beds:'', baths:'', sqft:'', units:1, notes:'',
+      imageUrls:[], taxAnnual:null, aiAnalyzed:false, aiReason:'',
+      rentZestimate:null, unitRents:[], unitLayouts:[],
       createdAt: Date.now()
     };
     const slot = $('form-slot');
@@ -684,15 +1147,25 @@
       <div class="panel">
         <h3>${existing?'编辑房源':'新增房源'}</h3>
         ${existing?'':`
-        <div style="margin-bottom:16px; border:1px dashed var(--brass); border-radius:5px; padding:10px 12px; background:#FFFDF8;">
-          <button type="button" class="ghost small" id="btn-toggle-zillow">粘贴 Zillow 链接自动填充</button>
-          <div id="zillow-slot" style="display:none; margin-top:10px;">
+        <div style="margin-bottom:16px; border:1px dashed var(--accent); border-radius:5px; padding:10px 12px; background:var(--accent-bg);">
+          <div style="font-size:12px; color:var(--ink-soft); margin-bottom:8px; font-family:'IBM Plex Mono',monospace;">自动填充房源信息：</div>
+          <div class="zillow-tabs">
+            <button type="button" class="zillow-tab active" data-ztab="url">粘贴链接</button>
+            <button type="button" class="zillow-tab" data-ztab="html">粘贴页面源码（推荐）</button>
+          </div>
+          <div id="ztab-url" style="margin-top:8px;">
             <input id="f-zillow-url" style="width:100%; font-family:'IBM Plex Mono',monospace; font-size:12px;" placeholder="https://www.zillow.com/homedetails/...">
             <button type="button" class="brass small" id="btn-do-zillow" style="margin-top:8px;">获取房源信息</button>
             <div id="zillow-status" style="margin-top:8px; font-size:12px; color:var(--slate);"></div>
           </div>
+          <div id="ztab-html" style="margin-top:8px; display:none;">
+            <textarea id="f-zillow-html" rows="5" style="width:100%; font-family:'IBM Plex Mono',monospace; font-size:11px;" placeholder="在 Zillow 页面按 Ctrl+U（或右键→查看页面源代码），Ctrl+A 全选，Ctrl+C 复制，然后粘贴到这里。会自动提取地址、价格、户型、面积、房产税、租金、所有照片（装修分析仍需手动上传单张照片）。"></textarea>
+            <button type="button" class="brass small" id="btn-do-zillow-html" style="margin-top:8px;">解析页面并自动填充</button>
+            <div id="zillow-html-status" style="margin-top:8px; font-size:12px; color:var(--slate);"></div>
+            <div id="zillow-images-preview" class="img-preview-grid"></div>
+          </div>
         </div>
-        <div style="margin-bottom:16px; border:1px dashed var(--brass); border-radius:5px; padding:10px 12px; background:#FFFDF8;">
+        <div style="margin-bottom:16px; border:1px dashed var(--accent); border-radius:5px; padding:10px 12px; background:var(--accent-bg);">
           <button type="button" class="ghost small" id="btn-toggle-import">粘贴导入（把我在聊天里给你的数据块粘进来）</button>
           <div id="import-slot" style="display:none; margin-top:10px;">
             <textarea id="f-import" rows="6" style="width:100%; font-family:'IBM Plex Mono',monospace; font-size:12px;" placeholder='粘贴 JSON，例如 {"address":"123 E Main St","city":"Mesa","price":320000,"beds":3,"baths":2,"sqft":1450,"units":1,"comps":[1600,1550],"notes":"..."}'></textarea>
@@ -739,6 +1212,7 @@
             </div>
             <div id="assessor-status" style="margin-top:6px; font-size:12px; color:var(--slate);">${p.assessorInfo ? escapeHtml(p.assessorInfo) : ''}</div>
           </div>
+          <div class="field"><label>年度房产税 $（从 Zillow 页面自动提取，有则直接用）</label><input type="number" id="f-tax-annual" value="${p.taxAnnual||''}" placeholder="从页面源码解析自动填入" step="50"></div>
           <div class="field full"><label>备注（描述摘要 / 照片判断理由等）</label><textarea id="f-notes" rows="2">${existing?escapeHtml(p.notes||''):''}</textarea></div>
         </div>
         <div style="margin-top:16px;">
@@ -748,6 +1222,13 @@
         </div>
         <div class="grid2" style="margin-top:16px;">
           <div class="field"><label>若无 comps，手动填市场租金 $/月</label><input type="number" id="f-manual-rent" value="${p.manualRent||0}" step="10"></div>
+        </div>
+        <!-- Multifamily unit layout editor -->
+        <div id="unit-layout-section" class="unit-layout-section" style="display:none;">
+          <h4>Multi-Family 户型分配（每类户型占一行，自动按户估算租金）</h4>
+          <div id="unit-layout-rows"></div>
+          <button type="button" class="ghost small" id="btn-add-unit-layout" style="margin-top:6px;">+ 添加户型</button>
+          <div id="unit-layout-validation" class="unit-validation"></div>
         </div>
         <div class="panel-actions">
           <button class="ghost" id="btn-cancel">取消</button>
@@ -765,7 +1246,133 @@
     }
     (p.comps && p.comps.length ? p.comps : [null,null]).forEach(addCompRow);
     $('btn-add-comp').addEventListener('click', ()=>addCompRow(null));
+
+    // ---- Unit layout editor helpers ----
+    function getFormUnitLayouts(){
+      const rows = document.querySelectorAll('#unit-layout-rows .unit-layout-row');
+      const layouts = [];
+      rows.forEach(r=>{
+        const inputs = r.querySelectorAll('input');
+        const beds = +(inputs[0]?.value) || 0;
+        const baths = +(inputs[1]?.value) || 0;
+        const count = +(inputs[2]?.value) || 0;
+        const pct = inputs[3] ? +(inputs[3].value) || 0 : 0;
+        if(count > 0 && (beds > 0 || baths > 0)){
+          layouts.push({beds, baths, count, rentAdjustPct: pct});
+        }
+      });
+      return layouts;
+    }
+    function addUnitLayoutRow(beds, baths, count, pct){
+      const d = $('unit-layout-rows');
+      const row = document.createElement('div');
+      row.className = 'unit-layout-row';
+      const initPct = pct!=null ? pct : 0;
+      row.innerHTML = `
+        <span class="ul-label">户型</span>
+        <input type="number" placeholder="Bed" value="${beds!=null?beds:''}" step="1" min="0" style="width:58px;">
+        <span class="ul-label">b</span>
+        <input type="number" placeholder="Bath" value="${baths!=null?baths:''}" step="0.5" min="0" style="width:62px;">
+        <span class="ul-label">ba ×</span>
+        <input type="number" class="ul-count" placeholder="户" value="${count||''}" step="1" min="1" style="width:50px;">
+        <span class="ul-label">户</span>
+        <span class="ul-tier-pills">
+          <span class="pill tiny ul-tier ${initPct===-5?'active':''}" data-pct="-5">老旧</span>
+          <span class="pill tiny ul-tier ${initPct===0?'active':''}" data-pct="0">一般</span>
+          <span class="pill tiny ul-tier ${initPct===12?'active':''}" data-pct="12">全新</span>
+        </span>
+        <input type="number" class="ul-pct" placeholder="%" value="${initPct}" step="1" style="width:52px;">
+        <span class="ul-label">%</span>
+        <button type="button" class="ghost small">×</button>
+      `;
+      row.querySelector('button').addEventListener('click', ()=>{
+        row.remove();
+        validateUnitLayouts();
+      });
+      const pctInput = row.querySelector('.ul-pct');
+      row.querySelectorAll('.ul-tier').forEach(pill=>{
+        pill.addEventListener('click', ()=>{
+          row.querySelectorAll('.ul-tier').forEach(x=>x.classList.remove('active'));
+          pill.classList.add('active');
+          pctInput.value = pill.dataset.pct;
+          validateUnitLayouts();
+        });
+      });
+      // Re-validate on any input change
+      row.querySelectorAll('input').forEach(inp=>{
+        inp.addEventListener('input', ()=>validateUnitLayouts());
+      });
+      d.appendChild(row);
+    }
+    function validateUnitLayouts(){
+      const layouts = getFormUnitLayouts();
+      const totalBeds = +$('f-beds').value || 0;
+      const totalBaths = +$('f-baths').value || 0;
+      const totalUnits = +$('f-units').value || 1;
+      const sumBeds = layouts.reduce((s,l)=>s+(l.beds||0)*(l.count||0),0);
+      const sumBaths = layouts.reduce((s,l)=>s+(l.baths||0)*(l.count||0),0);
+      const sumUnits = layouts.reduce((s,l)=>s+(l.count||0),0);
+      const v = $('unit-layout-validation');
+      if(!layouts.length){
+        v.className = 'unit-validation';
+        v.textContent = '';
+        return;
+      }
+      const msgs = [];
+      if(totalBeds && sumBeds !== totalBeds) msgs.push(`bed: 户型合计 ${sumBeds} ≠ 总填写 ${totalBeds}`);
+      if(totalBaths && sumBaths !== totalBaths) msgs.push(`bath: 户型合计 ${sumBaths} ≠ 总填写 ${totalBaths}`);
+      if(sumUnits !== totalUnits) msgs.push(`户数: 户型合计 ${sumUnits} ≠ Units ${totalUnits}`);
+      if(msgs.length){
+        v.className = 'unit-validation mismatch';
+        v.textContent = '⚠ ' + msgs.join(' | ');
+      } else {
+        v.className = 'unit-validation match';
+        v.textContent = '✓ 户型 bed/bath/户数 验算通过';
+      }
+    }
+    function showUnitLayoutEditor(){
+      $('unit-layout-section').style.display = 'block';
+      $('unit-layout-rows').innerHTML = '';
+      // Populate from existing unitLayouts, or auto-suggest from the live form
+      // fields (not the stale initial `p` object — matters for new properties
+      // where the user just typed beds/baths/units into the form).
+      const layouts = (p.unitLayouts && p.unitLayouts.length) ? p.unitLayouts : [];
+      const liveUnits = +$('f-units').value || p.units || 1;
+      const liveBeds = +$('f-beds').value || p.beds || 0;
+      const liveBaths = +$('f-baths').value || p.baths || 0;
+      if(!layouts.length && liveUnits > 1){
+        // Auto-suggest: divide total beds/baths evenly across one grouped row
+        const b = liveBeds > 0 ? Math.round(liveBeds/liveUnits) : 2;
+        const ba = liveBaths > 0 ? Math.round(liveBaths/liveUnits) : 1;
+        addUnitLayoutRow(b, ba, liveUnits, 0);
+      } else if(layouts.length){
+        layouts.forEach(lu=>addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0));
+      }
+      // If empty after all, add one empty row
+      if(!layouts.length && liveUnits <= 1){
+        addUnitLayoutRow(liveBeds||2, liveBaths||1, 1, 0);
+      }
+      validateUnitLayouts();
+    }
+    $('btn-add-unit-layout').addEventListener('click', ()=>addUnitLayoutRow(null,null,1,0));
+    // Show/hide unit layout editor based on units field
+    $('f-units').addEventListener('input', ()=>{
+      const u = +$('f-units').value || 1;
+      if(u > 1){
+        if($('unit-layout-section').style.display === 'none'){
+          showUnitLayoutEditor();
+        }
+      } else {
+        $('unit-layout-section').style.display = 'none';
+      }
+    });
+    // Initial state
+    if((p.units||1) > 1){
+      showUnitLayoutEditor();
+    }
+
     $('btn-cancel').addEventListener('click', ()=>{ slot.innerHTML=''; editingId=null; });
+    let pendingImageUrls = p.imageUrls || [];
     $('btn-zori-lookup').addEventListener('click', ()=>{
       const zip = $('f-zip').value.trim();
       if(!zip){ toast('请先填写邮编'); return; }
@@ -782,20 +1389,88 @@
     });
 
     if(!existing){
-      $('btn-toggle-zillow').addEventListener('click', ()=>{
-        const box = $('zillow-slot');
-        box.style.display = box.style.display==='none' ? 'block' : 'none';
+      // Tab switching
+      document.querySelectorAll('.zillow-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.zillow-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          document.querySelectorAll('[id^="ztab-"]').forEach(c => c.style.display = 'none');
+          const target = $('ztab-' + tab.dataset.ztab);
+          if(target) target.style.display = 'block';
+        });
       });
+
+      // Helper: fill form fields from parseZillowHtml result
+      pendingImageUrls = p.imageUrls || [];
+      function fillFromParsed(data, statusBox, statusPrefix){
+        if(data.address) $('f-address').value = data.address;
+        if(data.city) $('f-city').value = data.city;
+        if(data.zip) $('f-zip').value = data.zip;
+        if(data.price != null) $('f-price').value = data.price;
+        if(data.beds != null) $('f-beds').value = data.beds;
+        if(data.baths != null) $('f-baths').value = data.baths;
+        if(data.sqft != null) $('f-sqft').value = data.sqft;
+        if(data.units != null) $('f-units').value = data.units;
+        if(data.taxAnnual != null) $('f-tax-annual').value = data.taxAnnual;
+        if(data.taxAssessed != null) $('f-assessed-value').value = data.taxAssessed;
+        if(data.description) $('f-notes').value = (data.description || '').slice(0, 500);
+        // Unit layouts (multifamily)
+        if(data.unitLayouts && data.unitLayouts.length && data.units > 1){
+          $('unit-layout-rows').innerHTML = '';
+          data.unitLayouts.forEach(lu => addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0));
+          $('unit-layout-section').style.display = 'block';
+          validateUnitLayouts();
+        }
+        // Property type
+        if(data.propertyType && data.propertyType === 'multifamily'){
+          // Could store for later save
+        }
+        // Rents
+        if(data.unitRents && data.unitRents.length){
+          compRows.innerHTML = '';
+          data.unitRents.forEach(r => addCompRow(r));
+        } else if(data.totalRent){
+          $('f-manual-rent').value = Math.round(data.totalRent);
+        } else if(data.rentZestimate){
+          $('f-manual-rent').value = Math.round(data.rentZestimate);
+        }
+        // Images
+        pendingImageUrls = data.imageUrls || [];
+        if(pendingImageUrls.length){
+          const preview = $('zillow-images-preview');
+          if(preview){
+            preview.innerHTML = pendingImageUrls.slice(0,20).map(u =>
+              `<img src="${escapeHtml(u)}" loading="lazy" onerror="this.style.display='none'">`
+            ).join('');
+          }
+        }
+        // Status summary
+        const parts = [statusPrefix];
+        if(data.price != null) parts.push(`售价 $${data.price.toLocaleString()}`);
+        if(data.beds != null) parts.push(`${data.beds}bd/${data.baths}ba`);
+        if(data.sqft != null) parts.push(`${data.sqft} sqft`);
+        if(data.units != null && data.units > 1) parts.push(`${data.units} units`);
+        if(data.taxAnnual != null) parts.push(`年地税 $${data.taxAnnual.toLocaleString()}`);
+        if(data.totalRent) parts.push(`总租金 $${data.totalRent.toLocaleString()}/mo`);
+        if(pendingImageUrls.length) parts.push(`${pendingImageUrls.length} 张照片`);
+        statusBox.innerHTML = parts.join(' · ');
+      }
+
+      // URL handler — parses the address out of the link text (no fetch to Zillow),
+      // then uses RentCast (licensed data) or the ZORI model. Full data + photos
+      // require the "粘贴页面源码" tab (you paste text you copied yourself — never
+      // an automated fetch of Zillow's site).
       $('btn-do-zillow').addEventListener('click', async ()=>{
         const url = $('f-zillow-url').value.trim();
         const statusBox = $('zillow-status');
+        if(!url){ statusBox.textContent = '请粘贴 Zillow 链接'; return; }
+        statusBox.innerHTML = `<span class="spinner"></span>正在处理…`;
         const key = assumptions.rentcastKey;
         const parsed = parseZillowAddress(url);
-        if(!parsed){ statusBox.textContent = '无法从链接中解析地址，请确认是 Mesa/Tempe/Phoenix 的 Zillow 房源链接，或直接手动填写下方表单'; return; }
+        if(!parsed){ statusBox.innerHTML = '无法解析地址，请改用"粘贴页面源码"方式<br><span style="color:var(--accent);">💡 在 Zillow 页面按 Ctrl+U 复制源码粘贴即可</span>'; return; }
         $('f-address').value = parsed.street;
         $('f-city').value = parsed.city;
         if(parsed.zip) $('f-zip').value = parsed.zip;
-        statusBox.innerHTML = `<span class="spinner"></span>正在查询 ${escapeHtml(parsed.street)}, ${parsed.city}…`;
         let data = { price:null, beds:null, baths:null, sqft:null, rent:null, comps:[] };
         if(key){
           try{ data = await fetchRentCastData(parsed.street, parsed.city, parsed.zip, key); }
@@ -814,12 +1489,38 @@
           applyZoriFallback(parsed.zip);
         }
         const missing = [];
-        if(!data.price) missing.push('售价（需手动填写或 RentCast Key）');
+        if(!data.price) missing.push('售价');
         if(data.beds==null) missing.push('bed/bath/sqft');
-        statusBox.textContent = key
-          ? (missing.length ? `已填充部分信息，仍缺：${missing.join('、')}` : '已从 RentCast 填充，请核对后保存')
-          : '未填写 RentCast Key，售价/户型需手动填写；租金已用 Zillow 免费区域参考值(ZORI)填充，仅供参考';
+        statusBox.innerHTML = (key
+          ? (missing.length ? `已从 RentCast 填充，仍缺：${missing.join('、')}` : '已从 RentCast 填充，请核对')
+          : '未配置 RentCast Key，售价/户型需手动填写；租金已用免费模型估算')
+          + `<br><span style="color:var(--accent);">💡 想要售价、真实户型、照片？在 Zillow 页面按 Ctrl+U 复制源码，粘贴到"页面源码"标签可提取全部信息</span>`;
       });
+
+      // HTML source handler — the main new feature
+      $('btn-do-zillow-html').addEventListener('click', ()=>{
+        const html = $('f-zillow-html').value.trim();
+        const statusBox = $('zillow-html-status');
+        if(!html || html.length < 200){ statusBox.textContent = '请粘贴完整的页面源码（至少几百字符）'; return; }
+        statusBox.innerHTML = `<span class="spinner"></span>正在解析…`;
+        try{
+          const data = parseZillowHtml(html);
+          if(!data.address && !data.price && !data.imageUrls.length){
+            statusBox.innerHTML = '<span style="color:var(--reject);">未提取到有效数据，请确认粘贴的是 Zillow 房源页面的完整源码</span>';
+            return;
+          }
+          fillFromParsed(data, statusBox, '✅ 解析完成');
+          // If no rent data, try ZORI fallback
+          if(!data.totalRent && !data.rentZestimate && !data.unitRents.length){
+            const zip = data.zip || $('f-zip').value.trim();
+            if(zip) applyZoriFallback(zip);
+          }
+        }catch(e){
+          console.error(e);
+          statusBox.innerHTML = `<span style="color:var(--reject);">解析失败：${escapeHtml(e.message)}</span>`;
+        }
+      });
+
       $('btn-toggle-import').addEventListener('click', ()=>{
         const box = $('import-slot');
         box.style.display = box.style.display==='none' ? 'block' : 'none';
@@ -846,19 +1547,32 @@
 
     $('btn-save').addEventListener('click', ()=>{
       const comps = Array.from(compRows.querySelectorAll('input')).map(i=>+i.value).filter(v=>v>0);
+      const unitLayouts = getFormUnitLayouts();
+      // Auto-detect propertyType from units + layouts
+      const propTypeField = $('f-proptype').value;
+      const units = +$('f-units').value||1;
+      let propertyType = 'single_family';
+      if(unitLayouts.length && units > 1) propertyType = 'multifamily';
+      else if(units > 1) propertyType = 'multifamily';
+
       const np = {
         id:p.id, createdAt:p.createdAt,
         address:$('f-address').value.trim(), city:$('f-city').value, zip:$('f-zip').value.trim(),
-        propType:$('f-proptype').value,
+        propType:propTypeField, propertyType,
+        homeType:p.homeType || (propertyType === 'multifamily' ? 'multifamily' : 'single_family'),
         assessedValue:+$('f-assessed-value').value||0,
         assessorInfo:$('assessor-status').dataset.info || (p.assessorInfo||''),
         price:+$('f-price').value, down:+$('f-down').value, rate:+$('f-rate').value,
         term:+$('f-term').value, tax:+$('f-tax').value, ins:+$('f-ins').value, hoa:+$('f-hoa').value,
         beds:$('f-beds').value?+$('f-beds').value:'', baths:$('f-baths').value?+$('f-baths').value:'',
-        sqft:$('f-sqft').value?+$('f-sqft').value:'', units:+$('f-units').value||1,
+        sqft:$('f-sqft').value?+$('f-sqft').value:'', units,
         notes:$('f-notes').value.trim(),
         comps, manualRent:+$('f-manual-rent').value,
-        tier:p.tier||'updated', rentAdjustPct:p.rentAdjustPct||0
+        tier:p.tier||'updated', rentAdjustPct:p.rentAdjustPct||0,
+        taxAnnual:+$('f-tax-annual').value||null,
+        imageUrls:pendingImageUrls,
+        aiAnalyzed:p.aiAnalyzed||false, aiReason:p.aiReason||'',
+        unitLayouts, rentZestimate:p.rentZestimate, unitRents:p.unitRents||[]
       };
       if(!np.address){ toast('请填写地址'); return; }
       const idx = properties.findIndex(x=>x.id===np.id);
