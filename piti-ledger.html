@@ -801,8 +801,8 @@
       else if(c.includes('phoenix')) r.city = 'Phoenix';
     }
 
-    // Deduplicate & limit images
-    r.imageUrls = [...new Set(r.imageUrls)].slice(0, 40);
+    // Deduplicate (no cap — a listing can have 70+ photos and she wants all of them)
+    r.imageUrls = [...new Set(r.imageUrls)];
     return r;
   }
 
@@ -882,13 +882,13 @@
     const rows = document.querySelectorAll('#unit-layout-rows .unit-layout-row');
     const layouts = [];
     rows.forEach(r=>{
-      const inputs = r.querySelectorAll('input');
-      const beds = +(inputs[0]?.value) || 0;
-      const baths = +(inputs[1]?.value) || 0;
-      const count = +(inputs[2]?.value) || 0;
-      const pct = inputs[3] ? +(inputs[3].value) || 0 : 0;
+      const beds = +(r.querySelector('.ul-beds')?.value) || 0;
+      const baths = +(r.querySelector('.ul-baths')?.value) || 0;
+      const count = +(r.querySelector('.ul-count')?.value) || 0;
+      const pct = +(r.querySelector('.ul-pct')?.value) || 0;
+      const actualRent = +(r.querySelector('.ul-actual-rent')?.value) || 0;
       if(count > 0 && (beds > 0 || baths > 0)){
-        layouts.push({beds, baths, count, rentAdjustPct: pct});
+        layouts.push({beds, baths, count, rentAdjustPct: pct, actualRent});
       }
     });
     return layouts;
@@ -950,13 +950,17 @@
       const details = [];
       let totalRent = 0, totalBaseRent = 0;
       for(const lu of unitLayouts){
+        const count = lu.count || 1;
+        const hasActual = lu.actualRent > 0;
+        // A real, current rent (existing tenant) beats the ZIP/bed-count model
+        // outright — no point estimating what's already known. Model estimate
+        // still shown alongside for reference/comparison.
         const perUnitBase = estimateUnitRent(zip, lu.beds||2, lu.baths||1) || 0;
         const adjustPct = lu.rentAdjustPct ?? p.rentAdjustPct ?? 0;
-        const perUnitAdj = Math.round(perUnitBase * (1 + adjustPct/100));
-        const count = lu.count || 1;
+        const perUnitAdj = hasActual ? lu.actualRent : Math.round(perUnitBase * (1 + adjustPct/100));
         details.push({
           beds: lu.beds, baths: lu.baths, count,
-          perUnitBase, perUnitAdj, adjustPct,
+          perUnitBase, perUnitAdj, adjustPct, hasActual,
           groupTotal: perUnitAdj * count
         });
         totalBaseRent += perUnitBase * count;
@@ -1050,7 +1054,7 @@
                 <div class="ub-header">按户型分别估算（ZIP 基准 × 户型系数 × 装修调整）</div>
                 ${rent.unitDetails.map(ud => `
                   <div class="ub-row">
-                    <span class="ub-type">${ud.beds}b${ud.baths}ba × ${ud.count}户 ${ud.adjustPct?`(${ud.adjustPct>0?'+':''}${ud.adjustPct}%)`:''}</span>
+                    <span class="ub-type">${ud.beds}b${ud.baths}ba × ${ud.count}户 ${ud.hasActual ? '<span style="color:var(--approve); font-weight:700;">实际租金</span>' : (ud.adjustPct?`(${ud.adjustPct>0?'+':''}${ud.adjustPct}%)`:'')}</span>
                     <span class="ub-rent">${fmt(ud.perUnitAdj)}/户 → ${fmt(ud.groupTotal)}</span>
                   </div>
                 `).join('')}
@@ -1075,7 +1079,7 @@
           <div style="margin-top:10px;">
             ${(p.imageUrls&&p.imageUrls.length) ? `
               <div class="card-images">
-                ${p.imageUrls.slice(0,12).map(u=>`<img src="${escapeHtml(u)}" loading="lazy" onerror="this.style.display='none'">`).join('')}
+                ${p.imageUrls.map(u=>`<img src="${escapeHtml(u)}" loading="lazy" onerror="this.style.display='none'">`).join('')}
               </div>
             ` : ''}
             <div class="ai-batch-result">
@@ -1357,16 +1361,16 @@
     }
     (p.comps && p.comps.length ? p.comps : [null,null]).forEach(addCompRow);
     $('btn-add-comp').addEventListener('click', ()=>addCompRow(null));
-    function addUnitLayoutRow(beds, baths, count, pct){
+    function addUnitLayoutRow(beds, baths, count, pct, actualRent){
       const d = $('unit-layout-rows');
       const row = document.createElement('div');
       row.className = 'unit-layout-row';
       const initPct = pct!=null ? pct : 0;
       row.innerHTML = `
         <span class="ul-label">户型</span>
-        <input type="number" placeholder="Bed" value="${beds!=null?beds:''}" step="1" min="0" style="width:58px;">
+        <input type="number" class="ul-beds" placeholder="Bed" value="${beds!=null?beds:''}" step="1" min="0" style="width:58px;">
         <span class="ul-label">b</span>
-        <input type="number" placeholder="Bath" value="${baths!=null?baths:''}" step="0.5" min="0" style="width:62px;">
+        <input type="number" class="ul-baths" placeholder="Bath" value="${baths!=null?baths:''}" step="0.5" min="0" style="width:62px;">
         <span class="ul-label">ba ×</span>
         <input type="number" class="ul-count" placeholder="户" value="${count||''}" step="1" min="1" style="width:50px;">
         <span class="ul-label">户</span>
@@ -1377,6 +1381,8 @@
         </span>
         <input type="number" class="ul-pct" placeholder="%" value="${initPct}" step="1" style="width:52px;">
         <span class="ul-label">%</span>
+        <span class="ul-label" style="margin-left:6px;">实际租金 $</span>
+        <input type="number" class="ul-actual-rent" placeholder="有现租户就填" value="${actualRent||''}" step="10" min="0" style="width:90px;" title="填了就直接用这个数，不再按 ZIP 模型估算">
         <button type="button" class="ghost small">×</button>
       `;
       row.querySelector('button').addEventListener('click', ()=>{
@@ -1441,7 +1447,7 @@
         const ba = liveBaths > 0 ? Math.round(liveBaths/liveUnits) : 1;
         for(let i=0;i<liveUnits;i++) addUnitLayoutRow(b, ba, 1, 0);
       } else if(layouts.length){
-        layouts.forEach(lu=>addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0));
+        layouts.forEach(lu=>addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0, lu.actualRent||0));
       }
       // If empty after all, add one empty row
       if(!layouts.length && liveUnits <= 1){
@@ -1515,7 +1521,7 @@
         // Unit layouts (multifamily)
         if(data.unitLayouts && data.unitLayouts.length && data.units > 1){
           $('unit-layout-rows').innerHTML = '';
-          data.unitLayouts.forEach(lu => addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0));
+          data.unitLayouts.forEach(lu => addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0, lu.actualRent||0));
           $('unit-layout-section').style.display = 'block';
           validateUnitLayouts();
         }
@@ -1537,7 +1543,7 @@
         if(pendingImageUrls.length){
           const preview = $('zillow-images-preview');
           if(preview){
-            preview.innerHTML = pendingImageUrls.slice(0,20).map(u =>
+            preview.innerHTML = pendingImageUrls.map(u =>
               `<img src="${escapeHtml(u)}" loading="lazy" onerror="this.style.display='none'">`
             ).join('');
           }
