@@ -1403,10 +1403,7 @@
             </select>
           </div>
           <div class="field"><label>邮编 ZIP</label>
-            <div style="display:flex; gap:6px;">
-              <input id="f-zip" value="${existing?escapeHtml(p.zip||''):''}" placeholder="85203" style="flex:1;">
-              <button type="button" class="ghost small" id="btn-zori-lookup" title="用 Zillow 公开 ZORI 区域租金数据估算（免费，非精确 comp）">查参考租金</button>
-            </div>
+            <input id="f-zip" value="${existing?escapeHtml(p.zip||''):''}" placeholder="85203">
           </div>
           <div class="field"><label>类型（单层=House，双层=Apartment，单层multifamily=House）</label>
             <select id="f-proptype">
@@ -1448,12 +1445,17 @@
           <button type="button" class="ghost small" id="btn-add-comp">+ 添加一条 comp</button>
         </div>
         <div class="grid2" style="margin-top:16px;">
-          <div class="field"><label>若无 comps，手动填市场租金 $/月</label><input type="number" id="f-manual-rent" value="${p.manualRent||0}" step="10"></div>
+          <div class="field">
+            <label>若无 comps，手动填市场租金 $/月</label>
+            <input type="number" id="f-manual-rent" value="${p.manualRent||0}" step="10">
+            <div id="manual-rent-ref-hint" style="margin-top:4px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;"></div>
+          </div>
         </div>
         <!-- Multifamily unit layout editor -->
         <div id="unit-layout-section" class="unit-layout-section" style="display:none;">
           <h4>Multi-Family 户型分配（每类户型占一行，自动按户估算租金）</h4>
           <div id="unit-layout-rows"></div>
+          <div id="unit-layout-rent-total" style="margin-top:8px; font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:700;"></div>
           <button type="button" class="ghost small" id="btn-add-unit-layout" style="margin-top:6px;">+ 添加户型</button>
           <div id="unit-layout-validation" class="unit-validation"></div>
         </div>
@@ -1495,11 +1497,13 @@
         <span class="ul-label">%</span>
         <span class="ul-label" style="margin-left:6px;">实际租金 $</span>
         <input type="number" class="ul-actual-rent" placeholder="有现租户就填" value="${actualRent||''}" step="10" min="0" style="width:90px;" title="填了就直接用这个数，不再按 ZIP 模型估算">
+        <span class="ul-rent-preview" style="margin-left:8px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--accent);"></span>
         <button type="button" class="ghost small">×</button>
       `;
       row.querySelector('button').addEventListener('click', ()=>{
         row.remove();
         validateUnitLayouts();
+        refreshUnitLayoutRents();
       });
       const pctInput = row.querySelector('.ul-pct');
       row.querySelectorAll('.ul-tier').forEach(pill=>{
@@ -1508,13 +1512,62 @@
           pill.classList.add('active');
           pctInput.value = pill.dataset.pct;
           validateUnitLayouts();
+          refreshUnitLayoutRents();
         });
       });
-      // Re-validate on any input change
+      // Re-validate and recompute reference rent on any input change
       row.querySelectorAll('input').forEach(inp=>{
-        inp.addEventListener('input', ()=>validateUnitLayouts());
+        inp.addEventListener('input', ()=>{ validateUnitLayouts(); refreshUnitLayoutRents(); });
       });
       d.appendChild(row);
+      refreshUnitLayoutRents();
+    }
+    // Live per-unit reference rent (ZIP baseline × bed/bath model, same logic
+    // estimateRent() uses to compute the saved card) — shown while editing,
+    // not just after saving, and with no button to click: it just recomputes
+    // on every relevant input change.
+    function refreshUnitLayoutRents(){
+      const zip = $('f-zip').value.trim();
+      const rows = document.querySelectorAll('#unit-layout-rows .unit-layout-row');
+      let grandTotal = 0, anyRent = false;
+      rows.forEach(row=>{
+        const beds = +(row.querySelector('.ul-beds')?.value) || 0;
+        const baths = +(row.querySelector('.ul-baths')?.value) || 0;
+        const count = +(row.querySelector('.ul-count')?.value) || 0;
+        const pct = +(row.querySelector('.ul-pct')?.value) || 0;
+        const actualRent = +(row.querySelector('.ul-actual-rent')?.value) || 0;
+        const preview = row.querySelector('.ul-rent-preview');
+        if(!preview) return;
+        if(!count || (!beds && !baths)){ preview.textContent = ''; return; }
+        const base = estimateUnitRent(zip, beds||2, baths||1);
+        if(base == null){ preview.textContent = zip ? '无 ZIP 参考数据' : '请先填邮编'; return; }
+        const hasActual = actualRent > 0;
+        const perUnit = hasActual ? actualRent : Math.round(base * (1 + pct/100));
+        const rowTotal = perUnit * count;
+        grandTotal += rowTotal;
+        anyRent = true;
+        preview.innerHTML = hasActual
+          ? `<span style="color:var(--approve); font-weight:700;">实际</span> ${fmt(perUnit)}/户 → ${fmt(rowTotal)}`
+          : `参考 ${fmt(perUnit)}/户 → ${fmt(rowTotal)}`;
+      });
+      const totalEl = $('unit-layout-rent-total');
+      if(totalEl) totalEl.textContent = anyRent ? `合计参考租金：${fmt(grandTotal)}/mo` : '';
+    }
+    // Live SFH reference rent hint (ZORI model) — auto-fills the manual-rent
+    // field only while she hasn't typed her own number yet, since actual
+    // comps/manual entries always outrank the model reference.
+    function refreshSfhRentRef(){
+      if((+$('f-units').value || 1) > 1) return; // multi-unit uses the per-row breakdown instead
+      const zip = $('f-zip').value.trim();
+      const proptype = $('f-proptype').value;
+      const beds = +$('f-beds').value || 2;
+      const baths = +$('f-baths').value || 1;
+      const hint = $('manual-rent-ref-hint');
+      if(!hint) return;
+      const ref = zip ? estimateZoriRent(zip, proptype, beds, baths) : null;
+      if(ref == null){ hint.textContent = zip ? `邮编 ${zip} 无 ZORI 参考数据` : ''; return; }
+      hint.textContent = `参考（ZORI 模型，截至 ${ZORI_ASOF}）：${fmt(ref)}/mo`;
+      if(!manualRentUserEdited) $('f-manual-rent').value = ref;
     }
     function validateUnitLayouts(){
       const layouts = getFormUnitLayouts();
@@ -1578,6 +1631,7 @@
       } else {
         $('unit-layout-section').style.display = 'none';
       }
+      refreshSfhRentRef();
     });
     // Initial state
     if((p.units||1) > 1){
@@ -1589,12 +1643,17 @@
       pill.addEventListener('click', ()=>{ $('f-down').value = pill.dataset.val; });
     });
     let pendingImageUrls = p.imageUrls || [];
-    $('btn-zori-lookup').addEventListener('click', ()=>{
-      const zip = $('f-zip').value.trim();
-      if(!zip){ toast('请先填写邮编'); return; }
-      const found = applyZoriFallback(zip);
-      toast(found ? `已填入 Zillow 区域参考租金（截至 ${ZORI_ASOF}），仅供参考` : '没有该邮编的 Zillow 参考数据，请手动填写');
-    });
+    // Reference rent (ZORI model) is calculated live, no button — it just
+    // recomputes whenever zip/beds/baths/proptype change, for both the SFH
+    // hint and the per-unit breakdown in the multi-family editor. Only skips
+    // touching f-manual-rent once she's actually typed into it herself —
+    // otherwise every beds/baths keystroke would lock in a stale auto-fill
+    // from before she finished typing.
+    let manualRentUserEdited = false;
+    $('f-manual-rent').addEventListener('input', ()=>{ manualRentUserEdited = true; });
+    ['f-zip','f-beds','f-baths'].forEach(id => $(id).addEventListener('input', ()=>{ refreshSfhRentRef(); refreshUnitLayoutRents(); }));
+    $('f-proptype').addEventListener('change', refreshSfhRentRef);
+    refreshSfhRentRef();
     $('btn-assessor-lookup').addEventListener('click', ()=>{
       const street = $('f-address').value.trim();
       const city = $('f-city').value;
@@ -1670,26 +1729,38 @@
         if(data.totalRent) parts.push(`总租金 $${data.totalRent.toLocaleString()}/mo`);
         if(pendingImageUrls.length) parts.push(`${pendingImageUrls.length} 张照片`);
         statusBox.innerHTML = parts.join(' · ');
+        // zip/beds/baths were just set programmatically above (no 'input'
+        // event fires for that), so the live reference-rent hints need an
+        // explicit refresh here rather than relying on field listeners.
+        refreshSfhRentRef();
+        refreshUnitLayoutRents();
       }
 
       // Auto-fetch property tax from Maricopa County ArcGIS when Zillow didn't have it.
+      // Callers must `await` this — it used to be fired without awaiting, so
+      // clicking 保存 before the ~1-3s round-trip finished meant f-tax-annual
+      // was still empty and the ArcGIS result never made it into the saved
+      // property at all.
       async function autoFetchTaxFromArcGIS(statusEl){
         if($('f-tax-annual').value) return; // Already have tax data
         const street = $('f-address').value.trim();
         const city = $('f-city').value;
         if(!street || !city) return;
+        const marker = document.createElement('span');
+        marker.style.color = 'var(--slate)';
+        marker.textContent = ' · 🔎 查询地税中…';
+        if(statusEl) statusEl.appendChild(marker);
         try{
           const result = await queryArcGISAssessor(street, city);
           $('f-tax-annual').value = result.taxEstimate;
           $('f-assessed-value').value = result.lpv;
           $('assessor-status').dataset.info = `ArcGIS 自动查询: APN ${result.apn}, LPV $${result.lpv.toLocaleString()}, ${result.rateLabel} → 年税 $${result.taxEstimate.toLocaleString()}`;
           $('assessor-status').textContent = `已从 ArcGIS 查到 LPV $${result.lpv.toLocaleString()} (APN ${result.apn})，估算年税 ≈ $${result.taxEstimate.toLocaleString()}`;
-          if(statusEl){
-            const s = statusEl.innerHTML;
-            statusEl.innerHTML = s + ` <span style="color:var(--accent);">· 地税 $${result.taxEstimate.toLocaleString()}/年（ArcGIS 自动估算，${result.rateLabel}）</span>`;
-          }
+          marker.style.color = 'var(--accent)';
+          marker.textContent = ` · 地税 $${result.taxEstimate.toLocaleString()}/年（ArcGIS 自动估算，${result.rateLabel}）`;
         }catch(e){
           console.warn('ArcGIS tax auto-fetch failed:', e.message);
+          marker.remove();
         }
       }
 
@@ -1732,11 +1803,13 @@
           ? (missing.length ? `已从 RentCast 填充，仍缺：${missing.join('、')}` : '已从 RentCast 填充，请核对')
           : '未配置 RentCast Key，售价/户型需手动填写；租金已用免费模型估算')
           + `<br><span style="color:var(--accent);">💡 想要售价、真实户型、照片？在 Zillow 页面按 Ctrl+U 复制源码，粘贴到"页面源码"标签可提取全部信息</span>`;
-        autoFetchTaxFromArcGIS(statusBox);
+        refreshSfhRentRef();
+        refreshUnitLayoutRents();
+        await autoFetchTaxFromArcGIS(statusBox);
       });
 
       // HTML source handler — the main new feature
-      $('btn-do-zillow-html').addEventListener('click', ()=>{
+      $('btn-do-zillow-html').addEventListener('click', async ()=>{
         const html = $('f-zillow-html').value.trim();
         const statusBox = $('zillow-html-status');
         if(!html || html.length < 200){ statusBox.textContent = '请粘贴完整的页面源码（至少几百字符）'; return; }
@@ -1754,7 +1827,8 @@
             if(zip) applyZoriFallback(zip);
           }
           // Auto-fetch tax from ArcGIS if Zillow didn't have it
-          autoFetchTaxFromArcGIS(statusBox);
+          await autoFetchTaxFromArcGIS(statusBox);
+          refreshUnitLayoutRents();
         }catch(e){
           console.error(e);
           statusBox.innerHTML = `<span style="color:var(--reject);">解析失败：${escapeHtml(e.message)}</span>`;
