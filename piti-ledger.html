@@ -1173,6 +1173,31 @@
     return {pi, tax, ins, hoa, total: pi+tax+ins+hoa};
   }
 
+  // Solve for the maximum purchase price at which rent × coverageRatio still
+  // covers PITI, holding every other assumption fixed (down%, rate, term,
+  // tax%, ins%, HOA, and assessed value / annual tax if either is set).
+  // PITI is linear in price under those assumptions (P&I and, unless a
+  // fixed assessed value or annual tax override it, the tax line, both
+  // scale directly with price; insurance always does; HOA never does), so
+  // this is a closed-form solve rather than a search.
+  function suggestedMaxPrice(p, rentTotal, ratio){
+    if(!rentTotal) return null;
+    const threshold = rentTotal * ratio;
+    const down = p.down/100;
+    const r = p.rate/100/12;
+    const n = p.term*12;
+    const piCoef = (r === 0) ? (1-down)/n : (1-down) * r / (1 - Math.pow(1+r, -n));
+    const insCoef = p.ins/100/12;
+    const hoa = p.hoa || 0;
+    let taxCoef = 0, taxFixed = 0;
+    if(p.taxAnnual) taxFixed = p.taxAnnual/12;
+    else if(p.assessedValue) taxFixed = p.assessedValue * p.tax/100/12;
+    else taxCoef = p.tax/100/12;
+    const slope = piCoef + insCoef + taxCoef;
+    if(slope <= 0) return null;
+    return (threshold - hoa - taxFixed) / slope;
+  }
+
   // Multi-family: per-unit-layout rent estimation using ZORI lookup table.
   // Each unit layout gets its own base rent (ZIP × bed multiplier), own adjustment
   // percentage, then total = sum(count × adjusted rent per layout).
@@ -1258,6 +1283,7 @@
     const threshold = rent.total * coverageRatio;
     const pass = threshold >= piti.total && rent.total > 0;
     const margin = threshold - piti.total;
+    const suggested = suggestedMaxPrice(p, rent.total, coverageRatio);
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -1270,6 +1296,20 @@
         </div>
         <div class="stamp ${pass?'approve':'reject'}">${pass?'达标 / Approved':'未达标 / Rejected'}</div>
       </div>
+
+      ${suggested == null ? '' : `
+      <div class="margin-box ${suggested > 0 && p.price <= suggested ? 'approve' : 'reject'}" style="margin-top:10px;">
+        <div class="cap">建议购买价（租金×${coverageRatio.toFixed(2)} ≥ PITI 的最高可接受价）</div>
+        <div class="big">${suggested > 0 ? fmt(suggested) : '任何价格都无法达标'}</div>
+        <div style="font-size:11px; margin-top:2px; font-weight:400;">${
+          suggested <= 0
+            ? `固定成本（地税/HOA）已超过租金×${coverageRatio.toFixed(2)}，与价格无关`
+            : (p.price <= suggested
+              ? `现价 ${fmt(p.price)}，还有 ${fmt(suggested - p.price)} 议价空间`
+              : `现价 ${fmt(p.price)}，需砍价 ${fmt(p.price - suggested)} 以内才能达标`)
+        }</div>
+      </div>
+      `}
 
       <div class="card-body">
         <div>
