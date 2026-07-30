@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multifamily Scanner — Mesa · Tempe · Phoenix</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--pass:#3fb950;--fail:#f85149;--warn:#d29922;--red:#da3633;--radius:8px;--font:'Segoe UI',system-ui,sans-serif;--mono:'Cascadia Code','JetBrains Mono','IBM Plex Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;padding:12px 16px}
+h1{font-size:18px;font-weight:600;letter-spacing:-0.3px;margin-bottom:4px}
+h2{font-size:14px;font-weight:500;color:var(--muted);margin-bottom:16px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.topbar h1 span{color:var(--accent);font-family:var(--mono);font-weight:600}
+.btn{font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--radius);border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--text);transition:all .15s;white-space:nowrap}
+.btn:hover{background:#1f2937;border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700}
+.btn.primary:hover{background:#79c0ff}
+.btn.small{padding:4px 10px;font-size:11px}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;min-width:100px;text-align:center}
+.stat .val{font-size:22px;font-weight:700;font-family:var(--mono)}
+.stat .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.stat.pass .val{color:var(--pass)}
+.stat.fail .val{color:var(--fail)}
+.stat.total .val{color:var(--accent)}
+.paste-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px}
+.paste-section h3{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--muted)}
+.city-tabs{display:flex;gap:4px;margin-bottom:10px}
+.city-tab{font-size:12px;padding:6px 16px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--muted);cursor:pointer;transition:all .15s}
+.city-tab.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
+.city-tab.has-data{border-color:var(--pass);color:var(--pass)}
+.paste-box{display:flex;gap:8px;align-items:flex-start}
+textarea{flex:1;min-height:100px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical}
+textarea::placeholder{color:var(--muted)}
+.paste-actions{display:flex;flex-direction:column;gap:6px}
+.paste-hint{font-size:10px;color:var(--muted);margin-top:8px}
+.paste-hint code{background:#1f2937;padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:10px}
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.toolbar select,.toolbar input{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:12px;padding:6px 10px;font-family:var(--font)}
+.filter-pills{display:flex;gap:4px}
+.pill{font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;background:var(--bg);color:var(--muted);transition:all .15s;white-space:nowrap}
+.pill.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.table-wrap{overflow-x:auto;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:var(--text)}
+td{padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;font-family:var(--mono);font-size:11px}
+tr:hover{background:rgba(88,166,255,.05)}
+tr.pass-row td:first-child{border-left:3px solid var(--pass)}
+tr.fail-row td:first-child{border-left:3px solid var(--fail)}
+tr.warn-row td:first-child{border-left:3px solid var(--warn)}
+tr.new-row{background:rgba(88,166,255,.08)}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.status-dot.pass{background:var(--pass)}
+.status-dot.fail{background:var(--fail)}
+.status-dot.warn{background:var(--warn)}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+.history-section{margin-top:24px}
+.history-section h3{font-size:14px;font-weight:600;margin-bottom:10px}
+.history-list{display:flex;flex-direction:column;gap:6px}
+.history-item{display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-size:12px;transition:all .15s}
+.history-item:hover{border-color:var(--accent)}
+.history-item .date{font-weight:600;min-width:90px}
+.history-item .summary{color:var(--muted);font-family:var(--mono)}
+.config-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.config-row label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:600}
+.config-row input{width:64px;font-size:12px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);text-align:center}
+.coverage-pills{display:flex;gap:4px}
+.coverage-pills .pill{font-family:var(--mono)}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--text);z-index:999;animation:slideIn .3s ease;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+@keyframes slideIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.loading{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:6px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.expand-row{font-size:11px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);background:rgba(88,166,255,.03)}
+.expand-row .detail{font-family:var(--mono);font-size:10px;margin:4px 0}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1><span>MF</span> Multifamily Scanner</h1>
+    <h2>Mesa · Tempe · Phoenix 每日自动扫描</h2>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <span style="font-size:11px;color:var(--muted)" id="last-scan-label">上次扫描：—</span>
+    <button class="btn small" onclick="clearAllData()" title="清空所有扫描记录">🗑 清空</button>
+    <button class="btn small" onclick="exportData()">📥 导出</button>
+  </div>
+</div>
+
+<div class="stats" id="stats-bar">
+  <div class="stat total"><div class="val" id="stat-total">—</div><div class="lbl">今日总计</div></div>
+  <div class="stat pass"><div class="val" id="stat-pass">—</div><div class="lbl">✅ 通过</div></div>
+  <div class="stat fail"><div class="val" id="stat-fail">—</div><div class="lbl">❌ 不通过</div></div>
+  <div class="stat"><div class="val" id="stat-new">—</div><div class="lbl">🆕 新挂牌</div></div>
+  <div class="stat"><div class="val" id="stat-mesa" style="font-size:16px">—</div><div class="lbl">Mesa</div></div>
+  <div class="stat"><div class="val" id="stat-tempe" style="font-size:16px">—</div><div class="lbl">Tempe</div></div>
+  <div class="stat"><div class="val" id="stat-phx" style="font-size:16px">—</div><div class="lbl">Phoenix</div></div>
+</div>
+
+<div class="config-row">
+  <label>首付</label><input type="number" id="cfg-down" value="25" min="0" max="100" onchange="saveConfig()">%
+  <label>利率</label><input type="number" id="cfg-rate" value="7.0" min="0" max="20" step="0.1" onchange="saveConfig()">%
+  <label>年期</label><input type="number" id="cfg-term" value="30" min="5" max="50" onchange="saveConfig()">
+  <label>税率</label><input type="number" id="cfg-tax-rate" value="0.65" min="0" max="2" step="0.01" onchange="saveConfig()">%
+  <label>保险</label><input type="number" id="cfg-ins" value="0.35" min="0" max="2" step="0.01" onchange="saveConfig()">%/yr
+  <label>覆盖率阈值</label>
+  <div class="coverage-pills" id="coverage-pills">
+    <span class="pill active" data-cr="0.7" onclick="setCoverage(0.7)">0.70</span>
+    <span class="pill" data-cr="0.75" onclick="setCoverage(0.75)">0.75</span>
+    <span class="pill" data-cr="0.8" onclick="setCoverage(0.80)">0.80</span>
+  </div>
+  <input type="number" id="cfg-cr-custom" value="" placeholder="自定义" style="width:56px;font-size:11px" min="0.01" max="2" step="0.01" onchange="setCoverage(+this.value)">
+</div>
+
+<div class="paste-section">
+  <h3>📋 粘贴 Zillow 多家庭搜索页源码（可跨 3 城批量）</h3>
+  <div class="city-tabs" id="city-tabs">
+    <div class="city-tab active" data-city="Mesa" onclick="switchCityTab('Mesa')">Mesa</div>
+    <div class="city-tab" data-city="Tempe" onclick="switchCityTab('Tempe')">Tempe</div>
+    <div class="city-tab" data-city="Phoenix" onclick="switchCityTab('Phoenix')">Phoenix</div>
+  </div>
+  <div class="paste-box">
+    <textarea id="paste-input" placeholder="在浏览器打开 https://www.zillow.com/mesa-az/multifamily/ → 右键查看网页源代码 → Ctrl+A 全选 → Ctrl+C 复制 → 回到这里 Ctrl+V 粘贴"></textarea>
+    <div class="paste-actions">
+      <button class="btn primary" onclick="parsePastedHTML(currentCity)" id="btn-parse">🔍 解析</button>
+      <button class="btn" onclick="document.getElementById('paste-input').value=''">清除</button>
+    </div>
+  </div>
+  <div class="paste-hint" style="margin-top:6px">
+    💡 操作步骤：打开 <code>zillow.com/<b>城市</b>-az/multifamily/</code> → <code>Ctrl+U</code> 或右键"查看网页源代码" → <code>Ctrl+A</code> <code>Ctrl+C</code> 全选复制 → 回到此处粘贴
+  </div>
+</div>
+
+<div class="toolbar">
+  <span style="font-size:12px;color:var(--muted)">筛选：</span>
+  <div class="filter-pills" id="status-filter">
+    <span class="pill active" data-status="all" onclick="setFilter('status','all')">全部</span>
+    <span class="pill" data-status="pass" onclick="setFilter('status','pass')">✅ 通过</span>
+    <span class="pill" data-status="fail" onclick="setFilter('status','fail')">❌ 不通过</span>
+    <span class="pill" data-status="warn" onclick="setFilter('status','warn')">⚠ 边缘</span>
+    <span class="pill" data-status="new" onclick="setFilter('status','new')">🆕 新挂牌</span>
+  </div>
+  <div class="filter-pills" id="city-filter" style="margin-left:8px">
+    <span class="pill active" data-city="all" onclick="setFilter('city','all')">全部城市</span>
+    <span class="pill" data-city="Mesa" onclick="setFilter('city','Mesa')">Mesa</span>
+    <span class="pill" data-city="Tempe" onclick="setFilter('city','Tempe')">Tempe</span>
+    <span class="pill" data-city="Phoenix" onclick="setFilter('city','Phoenix')">Phoenix</span>
+  </div>
+  <span style="margin-left:8px;font-size:11px;color:var(--muted)" id="filtered-count"></span>
+</div>
+
+<div class="table-wrap">
+<table id="results-table">
+<thead>
+<tr>
+  <th style="width:20px"></th>
+  <th>地址</th>
+  <th>城市</th>
+  <th>ZIP</th>
+  <th>售价</th>
+  <th>户���</th>
+  <th>估算户数</th>
+  <th>月租金</th>
+  <th>月PITI</th>
+  <th>覆盖率</th>
+  <th>净现金流</th>
+  <th>上架天数</th>
+  <th>操作</th>
+</tr>
+</thead>
+<tbody id="results-body">
+  <tr><td colspan="13" class="empty-state">
+    <div class="icon">🏠</div>
+    <div>还没有扫描数据</div>
+    <div style="font-size:11px;margin-top:4px">粘贴 Zillow 搜索页源码并点击「解析」开始</div>
+  </td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="history-section">
+  <h3>📅 扫描历史</h3>
+  <div class="history-list" id="history-list">
+    <div style="color:var(--muted);font-size:12px;padding:8px">暂无历史记录</div>
+  </div>
+</div>
+
+<script>
+// ===== DATA =====
+const ZORI_BASELINE = {
+  '85201':1326,'85202':1393,'85203':1353,'85204':1430,'85205':1753,'85206':1626,'85207':2267,'85208':1943,'85209':1775,'85210':1453,'85212':2204,'85213':1669,'85215':2345,
+  '85003':1725,'85004':1616,'85006':1501,'85007':1375,'85008':1418,'85009':1182,'85012':1553,'85013':1516,'85014':1439,'85015':1247,'85016':1698,'85017':1215,'85018':1616,'85019':1441,'85020':1430,'85021':1220,'85022':1384,'85023':1308,'85024':1847,'85027':1449,'85028':2566,'85029':1234,'85031':1025,'85032':1639,'85033':1403,'85034':1392,'85035':1354,'85037':1736,'85040':1802,'85041':2207,'85042':1691,'85043':1970,'85044':1540,'85045':2901,'85048':1822,'85050':2574,'85051':1275,'85053':1252,'85054':1957,'85083':2693,'85085':1732,'85310':2274,'85339':2133,
+  '85281':1687,'85282':1584,'85283':1569,'85284':2769,'85288':1872
+};
+
+const RENTO_ZIP = {
+  '85201':{apartment:{1:1158,2:1300,3:1999,4:null},house:{1:1195,2:null,3:2032,4:2475}},
+  '85203':{apartment:{1:1125,2:1375,3:null,4:null},house:{1:null,2:null,3:2285,4:2650}},
+  '85204':{apartment:{1:1150,2:1375,3:null,4:null},house:{1:null,2:null,3:2250,4:2490}},
+  '85210':{apartment:{1:1195,2:null,3:null,4:null},house:{1:null,2:null,3:null,4:null}},
+  '85213':{apartment:{1:1129,2:null,3:null,4:null},house:{1:null,2:null,3:2245,4:null}},
+  '85008':{apartment:{1:1126,2:1378,3:null,4:null},house:{1:1149,2:null,3:2145,4:2400}},
+  '85281':{apartment:{1:1539,2:null,3:null,4:null},house:{1:1200,2:1700,3:2500,4:2795}},
+  '85282':{apartment:{1:1233,2:1803,3:null,4:null},house:{1:null,2:null,3:2450,4:2895}},
+  '85283':{apartment:{1:1304,2:1745,3:2450,4:null},house:{1:null,2:1850,3:2395,4:2873}},
+};
+const RENTO_ZIP_CITY = {
+  '85201':'Mesa','85203':'Mesa','85204':'Mesa','85210':'Mesa','85213':'Mesa',
+  '85008':'Phoenix','85281':'Tempe','85282':'Tempe','85283':'Tempe',
+};
+const RENTO_CITY = {
+  Mesa:{apartment:{1:1153,2:1300,3:1999,4:null},house:{1:1195,2:null,3:2075,4:2495}},
+  Phoenix:{apartment:{1:1126,2:1378,3:null,4:null},house:{1:1149,2:null,3:2145,4:2400}},
+  Tempe:{apartment:{1:1233,2:1790,3:2450,4:null},house:{1:1200,2:1700,3:2495,4:2873}},
+};
+const RENTO_UNIVERSAL = {apartment:{1:1160,2:1363,3:1999,4:null},house:{1:1200,2:1700,3:2195,4:2550}};
+const JURISDICTION_TAX_RATES = {Mesa:0.0044,Phoenix:0.0046,Tempe:0.0053};
+
+function rentoTiers(zip){
+  const city = RENTO_ZIP_CITY[zip];
+  const tiers = [];
+  if(RENTO_ZIP[zip]) tiers.push(RENTO_ZIP[zip]);
+  if(city && RENTO_CITY[city]) tiers.push(RENTO_CITY[city]);
+  tiers.push(RENTO_UNIVERSAL);
+  return tiers;
+}
+
+function resolveApartmentMedian(zip,bed){
+  for(const tier of rentoTiers(zip)){
+    if(tier.apartment[bed]!=null) return tier.apartment[bed];
+  }
+  return null;
+}
+
+function resolveHouseMedian(zip,bed){
+  for(const tier of rentoTiers(zip)){
+    if(tier.house[bed]!=null) return tier.house[bed];
+    if(tier.apartment[bed]!=null) return tier.apartment[bed];
+  }
+  return null;
+}
+
+function resolveRentoMedian(zip,type,bed){
+  if(type==='house') return resolveHouseMedian(zip,bed);
+  return resolveApartmentMedian(zip,bed) ?? resolveHouseMedian(zip,bed);
+}
+
+function getBedMult(zip,propType){
+  const type = (propType==='multifamily'||propType==='apartment')?'apartment':'house';
+  const anchor = resolveApartmentMedian(zip,2) ?? RENTO_UNIVERSAL.apartment[2];
+  const mult = {};
+  for(const bed of [1,2,3,4]){
+    const value = resolveRentoMedian(zip,type,bed);
+    mult[bed] = value!=null ? value/anchor : null;
+  }
+  return mult;
+}
+
+function estimatePerUnitRent(zip,beds,baths){
+  const base = ZORI_BASELINE[zip];
+  if(!base) return null;
+  const bedKey = Math.min(4,Math.max(1,Math.round(beds)||2));
+  const mult = getBedMult(zip,'apartment');
+  let rent = base * (mult[bedKey]||mult[2]||1);
+  const extraBaths = Math.max(0,(baths||1)-1);
+  rent *= (1+extraBaths*0.04);
+  return Math.round(rent);
+}
+
+function inferUnits(beds,baths){
+  // Heuristic: total beds / 2 = likely units (most multifamily is 2BR units)
+  // Adjust by bathrooms: if baths/beds > 0.5, likely fewer larger units
+  if(beds<=3) return 1;
+  if(beds<=5) return beds>=baths?2:1;
+  const ratio = baths/beds;
+  if(ratio>=0.4) return Math.max(1,Math.round(beds/3)); // 3BR units
+  return Math.max(2,Math.round(beds/2)); // 2BR units
+}
+
+function calcPITI(price,downPct,rate,term,taxRate,insRate,zip){
+  const loan = price*(1-downPct/100);
+  const r = rate/100/12;
+  const n = term*12;
+  const pi = r>0 ? loan*(r*Math.pow(1+r,n))/(Math.pow(1+r,n)-1) : loan/n;
+  // Tax: use jurisdiction rate if known, else generic
+  const city = RENTO_ZIP_CITY[zip];
+  const jRate = city?JURISDICTION_TAX_RATES[city]:null;
+  const taxMo = jRate ? price*jRate/12 : price*(taxRate/100)/12;
+  const insMo = price*(insRate/100)/12;
+  return {pi,taxMo,insMo,total:pi+taxMo+insMo};
+}
+
+// ===== STATE =====
+let currentCity = 'Mesa';
+let allListings = []; // All parsed listings from all cities
+let filter = {status:'all',city:'all'};
+let config = {down:25,rate:7,term:30,taxRate:0.65,insRate:0.35,coverageRatio:0.7};
+let scanHistory = {};
+
+// ===== INIT =====
+function $(id){return document.getElementById(id);}
+
+function loadAll(){
+  try{
+    const d = JSON.parse(localStorage.getItem('mf_scanner_data')||'{}');
+    if(d.listings) allListings = d.listings;
+    if(d.history) scanHistory = d.history;
+    if(d.config) config = {...config,...d.config};
+    $('cfg-down').value = config.down;
+    $('cfg-rate').value = config.rate;
+    $('cfg-term').value = config.term;
+    $('cfg-tax-rate').value = config.taxRate;
+    $('cfg-ins').value = config.insRate;
+    $('cfg-cr-custom').value = '';
+    setCoverageDisplay(config.coverageRatio);
+    const today = new Date().toISOString().slice(0,10);
+    $('last-scan-label').innerText = scanHistory[today] ? `上次扫描：${today} ${scanHistory[today].time||''}` : '上次扫描：—';
+  }catch(e){console.error(e);}
+  renderAll();
+}
+
+function saveAll(){
+  localStorage.setItem('mf_scanner_data',JSON.stringify({
+    listings:allListings,
+    history:scanHistory,
+    config
+  }));
+}
+
+function saveConfig(){
+  config.down = parseFloat($('cfg-down').value)||25;
+  config.rate = parseFloat($('cfg-rate').value)||7;
+  config.term = parseInt($('cfg-term').value)||30;
+  config.taxRate = parseFloat($('cfg-tax-rate').value)||0.65;
+  config.insRate = parseFloat($('cfg-ins').value)||0.35;
+  saveAll();
+  if(allListings.length) reanalyze();
+}
+
+function setCoverage(val){
+  if(isNaN(val)||val<0.01||val>2) return;
+  config.coverageRatio = val;
+  $('cfg-cr-custom').value = '';
+  setCoverageDisplay(val);
+  saveAll();
+  if(allListings.length) reanalyze();
+}
+
+function setCoverageDisplay(val){
+  document.querySelectorAll('#coverage-pills .pill').forEach(p=>{
+    p.classList.toggle('active',+p.dataset.cr===val);
+  });
+}
+
+// ===== TABS =====
+function switchCityTab(city){
+  currentCity = city;
+  document.querySelectorAll('#city-tabs .city-tab').forEach(t=>{
+    t.classList.toggle('active',t.dataset.city===city);
+  });
+  $('paste-input').placeholder = `在浏览器打开 https://www.zillow.com/${city.toLowerCase()}-az/multifamily/ → 右键查看网页源代码 → Ctrl+A 全选 → Ctrl+C 复制 → 回到这里 Ctrl+V 粘贴`;
+}
+
+function parsePastedHTML(city){
+  const raw = $('paste-input').value.trim();
+  if(!raw) return toast('请先粘贴 Zillow 搜索页源码');
+  $('btn-parse').innerHTML = '<span class="loading"></span>解析中...';
+  $('btn-parse').disabled = true;
+  
+  setTimeout(()=>{
+    try{
+      const listings = extractListings(raw,city);
+      if(listings.length===0){
+        toast('未找到 listing 数据。请确认粘贴的是 zillow 搜索页的完整网页源码（Ctrl+U 查看的源码，不是选中文字复制）');
+      }else{
+        // Merge into allListings, replacing listings for this city
+        allListings = allListings.filter(l=>l.sourceCity!==city);
+        // Mark new listings
+        const existingZPIDs = new Set(allListings.map(l=>l.zpid));
+        for(const l of listings){
+          l.isNew = !existingZPIDs.has(l.zpid);
+        }
+        allListings = [...allListings,...listings];
+        // Analyze
+        for(const l of listings) analyzeListing(l);
+        // Save to history
+        const today = new Date().toISOString().slice(0,10);
+        const now = new Date().toLocaleTimeString('zh-CN',{hour12:false});
+        if(!scanHistory[today]) scanHistory[today] = {time:now,cities:{},listings:[]};
+        scanHistory[today].cities[city] = listings.length;
+        // Merge unique listings into history
+        const histZPIDs = new Set(scanHistory[today].listings.map(l=>l.zpid));
+        for(const l of listings){
+          if(!histZPIDs.has(l.zpid)) scanHistory[today].listings.push(l);
+        }
+        saveAll();
+        toast(`✅ ${city} 解析完成：${listings.length} 个 listing`);
+        // Mark city tab
+        document.querySelector(`#city-tabs .city-tab[data-city="${city}"]`).classList.add('has-data');
+      }
+    }catch(e){
+      console.error(e);
+      toast('解析出错：'+e.message);
+    }
+    $('btn-parse').innerHTML = '🔍 解析';
+    $('btn-parse').disabled = false;
+    $('paste-input').value = '';
+    $('last-scan-label').innerText = `上次扫描：${new Date().toLocaleString('zh-CN')}`;
+    renderAll();
+  },100);
+}
+
+function extractListings(raw,city){
+  const listings = [];
+  // Method 1: __NEXT_DATA__
+  const ndMatch = raw.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+  if(ndMatch){
+    try{
+      const data = JSON.parse(ndMatch[1]);
+      const pp = data?.props?.pageProps;
+      const sps = pp?.searchPageState;
+      const cat1 = sps?.cat1;
+      const sr = cat1?.searchResults;
+      const lr = sr?.listResults||[];
+      for(const item of lr){
+        const l = normalizeListing(item,city);
+        if(l&&l.price>0) listings.push(l);
+      }
+    }catch(e){console.error('__NEXT_DATA__ parse error:',e);}
+  }
+  
+  // Method 2: searchPageState in script tags
+  if(listings.length===0){
+    const spsMatch = raw.match(/"searchPageState"\s*:\s*({.+?"cat1".+?}),\s*"__N_/s);
+    if(!spsMatch){
+      const spsMatch2 = raw.match(/"searchPageState"\s*:\s*({.+?"listResults".+?})\s*[,}]/s);
+    }
+  }
+  
+  // Method 3: Look for individual listing data in script tags
+  if(listings.length===0){
+    const allScripts = raw.match(/<script[^>]*>(.*?)<\/script>/gs)||[];
+    for(const script of allScripts){
+      if(script.includes('"listResults"')&&script.includes('"zpid"')){
+        try{
+          const jsonMatch = script.match(/\{"listResults"\s*:\s*(\[.+?\])\s*\}/s);
+          if(jsonMatch){
+            const items = JSON.parse(jsonMatch[1]);
+            for(const item of items){
+              const l = normalizeListing(item,city);
+              if(l&&l.price>0) listings.push(l);
+            }
+          }
+        }catch(e){}
+      }
+    }
+  }
+  
+  return listings;
+}
+
+function normalizeListing(item,city){
+  const zpid = item.zpid||item.id||'';
+  const address = item.address||item.addressStreet||'';
+  const addrCity = item.addressCity||item.city||city;
+  const zip = item.addressZipcode||item.zipcode||item.zip||'';
+  const price = item.unformattedPrice||item.price||0;
+  const beds = item.beds||item.bedrooms||0;
+  const baths = item.baths||item.bathrooms||0;
+  const sqft = item.area||item.squareFootage||0;
+  const daysOnMarket = item.daysOnZillow||item.daysOnMarket||0;
+  const detailUrl = item.detailUrl||item.url||'';
+  const latLong = item.latLong||{};
+  
+  if(!address||!price) return null;
+  
+  return {
+    zpid,
+    address,
+    city:addrCity,
+    zip,
+    price,
+    beds,
+    baths,
+    sqft,
+    daysOnMarket,
+    detailUrl: detailUrl.startsWith('http')?detailUrl:`https://www.zillow.com${detailUrl}`,
+    lat: latLong.latitude,
+    lng: latLong.longitude,
+    sourceCity:city,
+    isNew:false,
+    // Analysis placeholders
+    estUnits:0,
+    estMonthlyRent:0,
+    piti:0,
+    coverage:0,
+    netCashflow:0,
+    status:'',
+  };
+}
+
+function analyzeListing(l){
+  // Infer units
+  l.estUnits = Math.max(1,inferUnits(l.beds,l.baths));
+  const bedsPerUnit = Math.max(1,Math.round(l.beds/l.estUnits));
+  const bathsPerUnit = Math.max(1,Math.round(l.baths/l.estUnits));
+  
+  // Estimate per-unit rent
+  const perUnitRent = estimatePerUnitRent(l.zip,bedsPerUnit,bathsPerUnit)||0;
+  l.estMonthlyRent = perUnitRent * l.estUnits;
+  
+  // PITI
+  const piti = calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip);
+  l.piti = piti.total;
+  
+  // Coverage
+  l.coverage = l.piti>0 ? (l.estMonthlyRent*config.coverageRatio/l.piti) : 0;
+  l.netCashflow = l.estMonthlyRent - l.piti;
+  
+  // Status
+  if(l.coverage>=1) l.status = 'pass';
+  else if(l.coverage>=0.9) l.status = 'warn';
+  else l.status = 'fail';
+}
+
+function reanalyze(){
+  for(const l of allListings) analyzeListing(l);
+  saveAll();
+  renderAll();
+}
+
+function renderAll(){
+  renderStats();
+  renderTable();
+  renderHistory();
+}
+
+function renderStats(){
+  const cityListings = allListings.filter(l=>(filter.city==='all'||l.city===filter.city));
+  const total = cityListings.length;
+  const pass = cityListings.filter(l=>l.status==='pass').length;
+  const fail = cityListings.filter(l=>l.status==='fail').length;
+  const newCount = cityListings.filter(l=>l.isNew).length;
+  const mesa = allListings.filter(l=>l.city==='Mesa').length;
+  const tempe = allListings.filter(l=>l.city==='Tempe').length;
+  const phx = allListings.filter(l=>l.city==='Phoenix').length;
+  
+  $('stat-total').innerText = total||'—';
+  $('stat-pass').innerText = pass||0;
+  $('stat-fail').innerText = fail||0;
+  $('stat-new').innerText = newCount||0;
+  $('stat-mesa').innerText = mesa||'—';
+  $('stat-tempe').innerText = tempe||'—';
+  $('stat-phx').innerText = phx||'—';
+}
+
+function setFilter(type,val){
+  filter[type] = val;
+  // Update active pills
+  document.querySelectorAll(`#${type}-filter .pill`).forEach(p=>{
+    p.classList.toggle('active',p.dataset[type]===val);
+  });
+  renderAll();
+}
+
+function renderTable(){
+  let filtered = allListings;
+  if(filter.city!=='all') filtered = filtered.filter(l=>l.city===filter.city);
+  if(filter.status==='pass') filtered = filtered.filter(l=>l.status==='pass');
+  if(filter.status==='fail') filtered = filtered.filter(l=>l.status==='fail');
+  if(filter.status==='warn') filtered = filtered.filter(l=>l.status==='warn');
+  if(filter.status==='new') filtered = filtered.filter(l=>l.isNew);
+  
+  $('filtered-count').innerText = `显示 ${filtered.length}/${allListings.length} 条`;
+  
+  const tbody = $('results-body');
+  if(filtered.length===0){
+    tbody.innerHTML = `<tr><td colspan="13" class="empty-state"><div class="icon">🔍</div><div>${allListings.length?`筛选结果为空（共 ${allListings.length} 条数据）`:'还没有扫描数据'}</div></td></tr>`;
+    return;
+  }
+  
+  const fmt = n=>n.toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:0});
+  const fmtCF = n=>{
+    const sign = n>=0?'+':'-';
+    return sign+Math.abs(Math.round(n)).toLocaleString();
+  };
+  
+  tbody.innerHTML = filtered.map((l,i)=>{
+    const rowClass = l.isNew?'new-row':(l.status+'-row');
+    const statusIcon = l.status==='pass'?'✅':(l.status==='warn'?'⚠':'❌');
+    const coveragePct = (l.coverage*100).toFixed(0)+'%';
+    const bedsLabel = l.beds+'b/'+l.baths+'ba';
+    const unitsLabel = l.estUnits>1?`${l.estUnits}户 (${Math.round(l.beds/l.estUnits)}b${Math.round(l.baths/l.estUnits)}ba/户)`:'1户';
+    const newBadge = l.isNew?'<span style="background:var(--accent);color:#000;font-size:9px;padding:1px 5px;border-radius:8px;margin-left:4px;font-weight:700">NEW</span>':'';
+    
+    return `<tr class="${rowClass}" onclick="toggleDetail(${i})">
+      <td>${statusIcon}${newBadge}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${l.address}</td>
+      <td>${l.city}</td>
+      <td>${l.zip||'?'}</td>
+      <td>${fmt(l.price)}</td>
+      <td>${bedsLabel}</td>
+      <td>${unitsLabel}</td>
+      <td>${fmt(l.estMonthlyRent)}/mo</td>
+      <td>${fmt(l.piti)}/mo</td>
+      <td style="font-weight:700;color:${l.status==='pass'?'var(--pass)':l.status==='warn'?'var(--warn)':'var(--fail)'}">${coveragePct}</td>
+      <td style="color:${l.netCashflow>=0?'var(--pass)':'var(--fail)'};font-weight:600">${fmtCF(l.netCashflow)}/mo</td>
+      <td>${l.daysOnMarket>0?l.daysOnMarket+'d':'New'}</td>
+      <td>${l.detailUrl?`<a href="${l.detailUrl}" target="_blank" onclick="event.stopPropagation()">Zillow →</a>`:'—'}</td>
+    </tr>
+    <tr id="detail-${i}" class="expand-row" style="display:none" onclick="event.stopPropagation()">
+      <td colspan="13">
+        <div class="detail">估算详情：每户 ${fmt(l.estMonthlyRent/l.estUnits)}/mo × ${l.estUnits}户 = ${fmt(l.estMonthlyRent)}/mo ｜ 
+        PITI: ${fmt(l.piti)}/mo (PI ${fmt(l.piti?calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip).pi:0)} + Tax ${fmt(l.piti?calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip).taxMo:0)} + Ins ${fmt(l.piti?calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip).insMo:0)}) ｜
+        覆盖率 = ${config.coverageRatio} × ${fmt(l.estMonthlyRent)} / ${fmt(l.piti)} = ${(l.coverage*100).toFixed(1)}%
+        ${l.sqft?`｜ ${l.sqft.toLocaleString()} sqft` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleDetail(i){
+  const row = $('detail-'+i);
+  if(row) row.style.display = row.style.display==='none'?'':'none';
+}
+
+function renderHistory(){
+  const dates = Object.keys(scanHistory).sort().reverse();
+  const container = $('history-list');
+  if(dates.length===0){
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">暂无历史记录</div>';
+    return;
+  }
+  
+  container.innerHTML = dates.map(d=>{
+    const h = scanHistory[d];
+    const total = h.listings?.length||0;
+    const cities = h.cities?Object.entries(h.cities).map(([c,n])=>`${c}: ${n}`).join(', '):'';
+    const pass = h.listings?.filter(l=>l.status==='pass').length||0;
+    const fail = h.listings?.filter(l=>l.status==='fail').length||0;
+    
+    return `<div class="history-item" onclick="loadHistory('${d}')">
+      <span class="date">${d}</span>
+      <span style="color:var(--pass);font-family:var(--mono)">✅ ${pass}</span>
+      <span style="color:var(--fail);font-family:var(--mono)">❌ ${fail}</span>
+      <span class="summary">共 ${total} 条 ${cities?`(${cities})` : ''}</span>
+      <span style="font-size:10px;color:var(--muted);margin-left:auto">${h.time||''}</span>
+    </div>`;
+  }).join('');
+}
+
+function loadHistory(date){
+  const h = scanHistory[date];
+  if(!h||!h.listings) return toast('无数据');
+  allListings = h.listings.map(l=>({...l,isNew:false}));
+  saveAll();
+  renderAll();
+  toast(`已加载 ${date} 的历史数据（${allListings.length} 条）`);
+}
+
+function clearAllData(){
+  if(!confirm('确定清空所有扫描记录？此操作不可撤销！')) return;
+  allListings = [];
+  scanHistory = {};
+  localStorage.removeItem('mf_scanner_data');
+  renderAll();
+  toast('所有数据已清空');
+}
+
+function exportData(){
+  const data = JSON.stringify({listings:allListings,history:scanHistory,config},null,2);
+  const blob = new Blob([data],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mf-scanner-export-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('已导出');
+}
+
+function toast(msg){
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerText = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),2500);
+}
+
+// Init on load
+loadAll();
+</script>
+</body>
+</html>

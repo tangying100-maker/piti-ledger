@@ -68,3 +68,17 @@ Configure in the **默认假设参数** panel:
 - **RentCast API Key** — licensed data source for price/beds/baths on the
   "paste link" path (needs an active subscription, including their free
   tier, at app.rentcast.io/app/api)
+
+## Scanner — 每日多户扫描
+
+[`scanner.html`](scanner.html) + [`scanner.js`](scanner.js) 自动扫描 Mesa、
+Tempe、Phoenix 每日新上的 Multifamily listing，逐条计算 PITI 与覆盖率，
+标记 pass/fail。支持两种模式：
+
+- **自动模式**：每天 8:00 AM MST 由自动化触发 `scanner.js`，Playwright
+  真浏览器抓取 Zillow 搜索结果，输出 `scanner-data.json`
+- **手动兜底**：在 scanner.html 粘贴 Zillow 搜索页源码（Ctrl+U），一键
+  解析全部 listing
+
+打开 [`scanner.html`](scanner.html) 即可查看每日扫描结果，自动从
+`scanner-data.json` 加载最新数据，历史记录保存在浏览器 localStorage。
