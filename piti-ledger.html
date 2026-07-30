@@ -748,6 +748,8 @@
             }))
             .filter(lu => lu.beds != null || lu.baths != null)
             .map(lu => ({beds:lu.beds, baths:lu.baths, count:1}));
+          // Flag: unit count came from Zillow — cross-check against description later
+          r._unitsFromGdp = gdp.units.length;
         }
 
         // Detect propertyType from homeType
@@ -885,67 +887,107 @@
     }
 
     // --- Strategy 4: multifamily detection from description text ---
-    // Look for keywords like "duplex", "triplex", "4-plex", "five units" etc.,
-    // then try to figure out the actual unit-by-unit bed/bath mix — including
-    // MIXED mixes (e.g. "one 3bed/2bath owner's unit plus two 2bed/1bath units",
-    // which is how listings usually describe a 7bed/4bath triplex).
-    if(!r.propertyType || !r.unitLayouts.length){
-      const desc = (searchText || '').toLowerCase();
-      // Detect unit count from keywords
-      let detectedUnits = null;
-      const mfPatterns = [
-        ['fourplex', 4], ['four-plex', 4], ['4-plex', 4], ['quadplex', 4], ['quadruplex', 4],
-        ['4 unit', 4], ['four unit', 4], ['4 family', 4],
-        ['triplex', 3], ['tri-plex', 3], ['3-plex', 3],
-        ['3 unit', 3], ['three unit', 3], ['3 family', 3], ['triple', 3],
-        ['duplex', 2], ['du-plex', 2], ['2-plex', 2],
-        ['2 unit', 2], ['two unit', 2], ['2 family', 2], ['double', 2],
-        ['fiveplex', 5], ['5-plex', 5], ['5 unit', 5], ['five unit', 5],
-        ['6-plex', 6], ['sixplex', 6], ['6 unit', 6], ['six unit', 6],
-        ['8-plex', 8], ['8 unit', 8], ['eight unit', 8],
-        ['multi-family', null], ['multifamily', null], ['multi family', null],
-      ];
-      for(const [kw, n] of mfPatterns){
-        if(desc.includes(kw)){
-          if(n != null) detectedUnits = n;
-          r.propertyType = r.propertyType || 'multifamily';
-          break;
-        }
+    // Always scan for unit-count keywords (duplex/triplex/4-plex) from the
+    // listing description + visible page text, regardless of what Zillow's
+    // gdp.units data already set — gdp.units is often wrong (e.g. reports 2
+    // units for a triplex), and the agent-written description is more reliable.
+    // Keywords detected here also set propertyType to 'multifamily' when
+    // confirmed, so single-family listings are properly gated.
+    let descUnits = null;
+    const desc = (searchText || '').toLowerCase();
+    const mfPatterns = [
+      ['fourplex',4],['four-plex',4],['4-plex',4],['quadplex',4],['quadruplex',4],
+      ['4 unit',4],['four unit',4],['4 family',4],
+      ['triplex',3],['tri-plex',3],['3-plex',3],
+      ['3 unit',3],['three unit',3],['3 family',3],
+      ['duplex',2],['du-plex',2],['2-plex',2],
+      ['2 unit',2],['two unit',2],['2 family',2],
+      ['fiveplex',5],['5-plex',5],['5 unit',5],['five unit',5],
+      ['6-plex',6],['sixplex',6],['6 unit',6],['six unit',6],
+      ['8-plex',8],['8 unit',8],['eight unit',8],
+      ['multi-family',null],['multifamily',null],['multi family',null],
+    ];
+    for(const [kw, n] of mfPatterns){
+      if(desc && desc.includes(kw)){
+        descUnits = n;
+        if(!r.propertyType) r.propertyType = 'multifamily';
+        break;
       }
-      if(detectedUnits == null && r.units > 1) detectedUnits = r.units;
-      if(detectedUnits != null && r.units == null) r.units = detectedUnits;
+    }
+    // Fall back to gdp.units length if description gave no specific number
+    if(descUnits == null && r._unitsFromGdp > 1) descUnits = r._unitsFromGdp;
+    if(descUnits == null && r.units > 1) descUnits = r.units;
+    if(descUnits != null && r.units == null) r.units = descUnits;
 
-      if(detectedUnits && !r.unitLayouts.length){
-        // Scan for every "<N> bed / <N> bath" mention in the text, each with
-        // a quantity word/number looked up in the ~40 chars right before it
-        // ("two 2 bed 1 bath units", "a 3bd/2ba unit", "3BR/2BA owner's unit").
-        const numWords = {one:1,two:2,three:3,four:4,five:5,six:6,a:1,an:1,the:1};
-        const bbRe = /(\d)\s*(?:bed(?:room)?s?|bd|br)\s*[\/\-,&]?\s*(?:and\s*)?(\d(?:\.\d)?)\s*(?:bath(?:room)?s?|ba)\b/gi;
-        const groups = [];
-        let bm;
-        while((bm = bbRe.exec(desc)) !== null){
-          const before = desc.slice(Math.max(0, bm.index-40), bm.index);
-          const qm = before.match(/(\d+|one|two|three|four|five|six|a|an|the)\s*[\w\s]{0,12}$/i);
-          let count = 1;
-          if(qm){
-            const w = qm[1].toLowerCase();
-            count = numWords[w] ?? (+w || 1);
-          }
-          groups.push({beds:+bm[1], baths:+bm[2], count});
+    // Cross-validation: if Zillow's gdp.units reported a DIFFERENT count
+    // than the description, the description wins — gdp.units is often wrong.
+    // Clear the Zillow-derived layouts and recompute from the description.
+    if(r._unitsFromGdp && descUnits && r._unitsFromGdp !== descUnits){
+      r._descOverrideUnits = true; // flag for UI
+      r.units = descUnits;
+      r.unitLayouts = [];
+    }
+
+    // Unit-layout detection from description text: look for "<N> bed / <N> bath"
+    // mentions with a count keyword before them ("two 2 bed 1 bath units").
+    // Only runs if no unitLayouts yet OR if they were just cleared by override.
+    if(!r.unitLayouts.length && descUnits > 1){
+      const numWords = {one:1,two:2,three:3,four:4,five:5,six:6,a:1,an:1,the:1};
+      const bbRe = /(\d)\s*(?:bed(?:room)?s?|bd|br)\s*[\/\-,&]?\s*(?:and\s*)?(\d(?:\.\d)?)\s*(?:bath(?:room)?s?|ba)\b/gi;
+      const groups = [];
+      let bm;
+      while((bm = bbRe.exec(desc)) !== null){
+        const before = desc.slice(Math.max(0, bm.index-40), bm.index);
+        const qm = before.match(/(\d+|one|two|three|four|five|six|a|an|the)\s*[\w\s]{0,12}$/i);
+        let count = 1;
+        if(qm){
+          const w = qm[1].toLowerCase();
+          count = numWords[w] ?? (+w || 1);
         }
-        const groupTotal = groups.reduce((s,g)=>s+g.count, 0);
-        if(groups.length && groupTotal === detectedUnits){
-          // Mixed (or uniform) composition found and it adds up to the known
-          // unit count — trust it. Explode to one row per physical unit.
-          r.unitLayouts = explodeUnitGroups(groups);
-        } else if(r.beds != null && r.baths != null && detectedUnits > 0){
-          // No reliable text breakdown (or it didn't add up) — fall back to
-          // dividing the known totals evenly, one row per unit.
-          const b = Math.round(r.beds / detectedUnits) || null;
-          const ba = Math.round((r.baths / detectedUnits) * 2) / 2 || null;
-          r.unitLayouts = explodeUnitGroups([{beds:b, baths:ba, count:detectedUnits}]);
-          r._unitLayoutEvenSplit = true; // flag: this is a guess, not parsed from text
+        groups.push({beds:+bm[1], baths:+bm[2], count});
+      }
+      const groupTotal = groups.reduce((s,g)=>s+g.count, 0);
+      if(groups.length && groupTotal === descUnits){
+        // Mixed/uniform composition that adds up to descUnits — trust it
+        r.unitLayouts = explodeUnitGroups(groups);
+      } else if(r.beds != null && r.baths != null && descUnits > 0){
+        // No reliable text breakdown — smart even-split that tries common
+        // configurations before falling back to naive integer division. For
+        // example, a triplex with 6b/3ba is almost certainly 3×(2b1b), not
+        // 2×(3b1.5ba) as a bad gdp.units might have suggested.
+        const perB = r.beds / descUnits;
+        const perBa = r.baths / descUnits;
+        const bRound = Math.round(perB);
+        const baRound = Math.round(perBa * 2) / 2;
+        // Only accept if the split produces clean half/whole values and the
+        // per-unit bed count is a standard rental size (1-3, 4 is rare but ok)
+        if(Number.isInteger(perB) && (baRound === perBa) && perB >= 1 && perB <= 4){
+          r.unitLayouts = explodeUnitGroups([{beds:bRound, baths:baRound, count:descUnits}]);
+        } else {
+          // Best-effort rounding (user will need to correct in the editor)
+          r.unitLayouts = explodeUnitGroups([{beds:bRound, baths:baRound, count:descUnits}]);
         }
+        r._unitLayoutEvenSplit = true;
+      }
+    }
+
+    // If Zillow gdp.units set unitLayouts and it wasn't overridden above,
+    // verify that the per-unit bed/bath totals match the property totals.
+    // A mismatch (e.g. 6 total beds, 3 total baths, but gdp.units sums to
+    // 4/2) means Zillow's unit data is wrong but the count was correct —
+    // in that case, fall back to even-split instead of keeping garbage data.
+    if(r.unitLayouts.length && !r._unitLayoutEvenSplit && !r._descOverrideUnits
+       && r.beds != null && r.baths != null){
+      const sumBeds = r.unitLayouts.reduce((s,l)=>s+(l.beds||0)*(l.count||1),0);
+      const sumBaths = r.unitLayouts.reduce((s,l)=>s+(l.baths||0)*(l.count||1),0);
+      if((sumBeds !== r.beds || sumBaths !== r.baths) && r.units > 1){
+        // Silently fall back to even-split — gdp data is inconsistent
+        const perB = Math.round(r.beds / r.units);
+        const perBa = Math.round(r.baths / r.units * 2) / 2;
+        r.unitLayouts = explodeUnitGroups([{beds:perB, baths:perBa, count:r.units}]);
+        r._unitLayoutEvenSplit = true;
+        r._bedVerify = {total:r.beds, fromLayouts:sumBeds, match:false};
+        r._bathVerify = {total:r.baths, fromLayouts:sumBaths, match:false};
       }
     }
 
@@ -1336,7 +1378,7 @@
                 `).join('')}
                 <div class="ub-total">合计 ${fmt(rent.total)}/mo</div>
               </div>
-              <div style="margin-top:6px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">户型与装修调整在"编辑"里按户设置</div>
+              <div style="margin-top:6px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">${p._unitLayoutEvenSplit ? '⚠ 户型是自动均分的，可能不准确 — 点"编辑"按实际户型修改' : p._descOverrideUnits ? '⚠ 已按描述修正户型分配，请确认 — 点"编辑"查看' : '户型与装修调整在"编辑"里按户设置'}</div>
             ` : `
               <div style="font-family:'IBM Plex Mono',monospace; font-size:13px;">
                 comps 均值 ${fmt(rent.base)} → 装修调整后 <b>${fmt(rent.adj)}</b>${rent.units>1?`/unit × ${rent.units} units = <b>${fmt(rent.total)}</b>/mo`:''}
@@ -1790,10 +1832,10 @@
       const liveBeds = +$('f-beds').value || p.beds || 0;
       const liveBaths = +$('f-baths').value || p.baths || 0;
       if(!layouts.length && liveUnits > 1){
-        // Auto-suggest: divide total beds/baths evenly, one row per unit
-        // (not one grouped row) — each unit gets its own adjustable row.
-        const b = liveBeds > 0 ? Math.round(liveBeds/liveUnits) : 2;
-        const ba = liveBaths > 0 ? Math.round(liveBaths/liveUnits) : 1;
+        // Auto-suggest: divide total beds/baths evenly across all units.
+        // For 6b/3ba/3units → 3×(2b1b). For 5b/2ba/2units → 2×(2.5b1ba).
+        const b = liveBeds > 0 ? Math.max(1, Math.round(liveBeds/liveUnits)) : 2;
+        const ba = liveBaths > 0 ? Math.max(0.5, Math.round((liveBaths/liveUnits)*2)/2) : 1;
         for(let i=0;i<liveUnits;i++) addUnitLayoutRow(b, ba, 1, 0);
       } else if(layouts.length){
         layouts.forEach(lu=>addUnitLayoutRow(lu.beds, lu.baths, lu.count, lu.rentAdjustPct||0, lu.actualRent||0));
