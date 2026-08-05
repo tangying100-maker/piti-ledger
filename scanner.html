@@ -673,6 +673,24 @@ function renderDetailEditor(origIdx){
     l.unitLayouts = [{beds:bedsPerUnit, baths:bathsPerUnit, count:l.estUnits, actualRent:0}];
   }
   
+  function updatePreviews(){
+    let grandTotal = 0;
+    l.unitLayouts.forEach((lu, idx) => {
+      const count = lu.count||1;
+      const hasActual = lu.actualRent > 0;
+      const perUnit = hasActual ? lu.actualRent : (estimatePerUnitRent(l.zip, lu.beds||2, lu.baths||1)||0);
+      const rowTotal = perUnit * count;
+      grandTotal += rowTotal;
+      const rowEl = cell.querySelector(`.unit-edit-row[data-idx="${idx}"]`);
+      if(rowEl){
+        const preview = rowEl.querySelector('.ue-preview');
+        if(preview) preview.textContent = `${hasActual?'实际':'参考'} ${fmt(perUnit)}/户 → ${fmt(rowTotal)}`;
+      }
+    });
+    const totalEl = cell.querySelector('.unit-edit-total');
+    if(totalEl) totalEl.textContent = `合计租金：${fmt(grandTotal)}/mo`;
+  }
+
   function renderRows(){
     let html = '<div class="unit-editor-title">户型编辑（点击修改 Bed / Bath / 户数 / 实际租金）</div>';
     let grandTotal = 0;
@@ -697,12 +715,12 @@ function renderDetailEditor(origIdx){
     });
     html += `<div class="unit-edit-total">合计租金：${fmt(grandTotal)}/mo</div>`;
     html += `<div class="unit-edit-add"><button class="btn small" onclick="addUnitRow(${origIdx})">+ 添加户型</button></div>`;
-    
+
     // Detail info
     html += `<div class="detail" style="margin-top:8px">PITI: ${fmt(l.piti)}/mo (PI ${fmt(piti.pi)} + Tax ${fmt(piti.taxMo)} + Ins ${fmt(piti.insMo)}) ｜ 覆盖率 = ${config.coverageRatio} × ${fmt(grandTotal)} / ${fmt(l.piti)} = ${((config.coverageRatio*grandTotal/l.piti)*100).toFixed(1)}%${l.sqft?` ｜ ${l.sqft.toLocaleString()} sqft`:''}</div>`;
-    
+
     cell.innerHTML = html;
-    
+
     // Attach input listeners
     cell.querySelectorAll('.unit-edit-row').forEach(rowEl => {
       const idx = +rowEl.dataset.idx;
@@ -714,10 +732,11 @@ function renderDetailEditor(origIdx){
           lu.baths = +(rowEl.querySelector('.ue-baths').value) || 0;
           lu.count = Math.max(1, +(rowEl.querySelector('.ue-count').value) || 1);
           lu.actualRent = +(rowEl.querySelector('.ue-rent').value) || 0;
-          // Re-analyze and re-render just this editor + the table row above
+          // Re-analyze and save
           analyzeListing(l);
           saveAll();
-          renderRows();
+          // Only update preview text — do NOT rebuild HTML (would lose input focus)
+          updatePreviews();
           // Update the parent row's displayed values
           updateParentRow(origIdx);
         });
@@ -727,7 +746,7 @@ function renderDetailEditor(origIdx){
       });
     });
   }
-  
+
   renderRows();
 }
 
