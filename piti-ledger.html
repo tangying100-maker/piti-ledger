@@ -257,31 +257,12 @@
     display:flex; justify-content:space-between; align-items:center;
     padding:8px 12px; border-bottom:1px solid var(--paper-dim);
     font-family:'IBM Plex Mono',monospace; font-size:12.5px;
-    cursor:pointer; transition:background .15s;
   }
-  .unit-breakdown .ub-row:hover{background:var(--accent-bg);}
   .unit-breakdown .ub-row:last-child{border-bottom:none;}
   .unit-breakdown .ub-row .ub-type{
     font-weight:600; white-space:nowrap;
   }
   .unit-breakdown .ub-row .ub-rent{color:var(--ink-soft); white-space:nowrap;}
-  .unit-breakdown .ub-row .ub-edit-hint{
-    font-size:10px; color:var(--slate); opacity:0; transition:opacity .15s;
-    margin-left:6px; font-weight:400;
-  }
-  .unit-breakdown .ub-row:hover .ub-edit-hint{opacity:1;}
-  .unit-breakdown .ub-edit-row{
-    padding:10px 12px; border-bottom:1px solid var(--paper-dim);
-    background:var(--accent-bg); font-family:'IBM Plex Mono',monospace; font-size:12px;
-    display:flex; gap:6px; align-items:center; flex-wrap:wrap;
-  }
-  .unit-breakdown .ub-edit-row input{
-    width:52px; padding:4px 6px; border:1px solid var(--line);
-    border-radius:4px; font-size:12px; font-family:'IBM Plex Mono',monospace;
-  }
-  .unit-breakdown .ub-edit-row input.ub-actual{width:80px;}
-  .unit-breakdown .ub-edit-row .ub-edit-label{font-size:10px; color:var(--slate);}
-  .unit-breakdown .ub-edit-row button{padding:3px 10px; font-size:11px;}
   .unit-breakdown .ub-total{
     padding:8px 12px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;
     font-weight:700; text-align:right; border-top:1px solid var(--line);
@@ -1320,76 +1301,6 @@
     if(sameDay(d, yest)) return '昨天 · ' + d.toLocaleDateString('zh-CN');
     return d.toLocaleDateString('zh-CN', {year:'numeric', month:'long', day:'numeric', weekday:'long'});
   }
-
-  // Inline unit-layout editing — replaces a read-only .ub-row with an edit
-  // form directly on the card, so the user can fix bed/bath/count/actualRent
-  // without opening the full edit form.
-  function startInlineUnitEdit(p, idx, rowEl){
-    const lu = (p.unitLayouts || [])[idx];
-    if(!lu) return;
-
-    // Build the edit row
-    const editRow = document.createElement('div');
-    editRow.className = 'ub-edit-row';
-    editRow.innerHTML = `
-      <span class="ub-edit-label">Bed</span>
-      <input type="number" class="ub-in-beds" value="${lu.beds ?? ''}" step="1" min="0" style="width:48px;">
-      <span class="ub-edit-label">Bath</span>
-      <input type="number" class="ub-in-baths" value="${lu.baths ?? ''}" step="0.5" min="0" style="width:52px;">
-      <span class="ub-edit-label">\u00d7\u6237</span>
-      <input type="number" class="ub-in-count" value="${lu.count ?? 1}" step="1" min="1" style="width:48px;">
-      <span class="ub-edit-label" style="margin-left:4px;">\u5b9e\u9645\u79df\u91d1 $</span>
-      <input type="number" class="ub-in-rent ub-actual" value="${lu.actualRent || ''}" step="10" min="0" placeholder="\u9009\u586b">
-      <button type="button" class="ghost small ub-save-btn" style="background:var(--accent); color:#fff;">\u4fdd\u5b58</button>
-      <button type="button" class="ghost small ub-del-btn">\u5220\u9664</button>
-      <button type="button" class="ghost small ub-cancel-btn">\u53d6\u6d88</button>
-    `;
-
-    // Replace the display row with the edit row
-    rowEl.style.display = 'none';
-    rowEl.parentNode.insertBefore(editRow, rowEl.nextSibling);
-
-    // Focus the beds input
-    const bedsInput = editRow.querySelector('.ub-in-beds');
-    bedsInput.focus();
-    bedsInput.select();
-
-    function restore(){
-      editRow.remove();
-      rowEl.style.display = '';
-    }
-
-    editRow.querySelector('.ub-cancel-btn').addEventListener('click', restore);
-
-    editRow.querySelector('.ub-del-btn').addEventListener('click', () => {
-      p.unitLayouts.splice(idx, 1);
-      saveProperties(); render();
-    });
-
-    editRow.querySelector('.ub-save-btn').addEventListener('click', () => {
-      const beds = +(editRow.querySelector('.ub-in-beds').value) || 0;
-      const baths = +(editRow.querySelector('.ub-in-baths').value) || 0;
-      const count = +(editRow.querySelector('.ub-in-count').value) || 1;
-      const actualRent = +(editRow.querySelector('.ub-in-rent').value) || 0;
-      p.unitLayouts[idx] = {
-        ...p.unitLayouts[idx],
-        beds: beds || null,
-        baths: baths || null,
-        count: Math.max(1, count),
-        actualRent: actualRent || 0
-      };
-      saveProperties(); render();
-    });
-
-    // Enter key saves, Escape cancels
-    editRow.querySelectorAll('input').forEach(inp => {
-      inp.addEventListener('keydown', (e) => {
-        if(e.key === 'Enter'){ e.preventDefault(); editRow.querySelector('.ub-save-btn').click(); }
-        if(e.key === 'Escape'){ e.preventDefault(); restore(); }
-      });
-    });
-  }
-
   function render(){
     const list = $('list');
     list.innerHTML = '';
@@ -1457,22 +1368,17 @@
           <div class="rent-block">
             <h4>租金估算</h4>
             ${rent.isPerUnit ? `
-              <div class="unit-breakdown" data-prop-id="${p.id}">
-                <div class="ub-header">按户型分别估算（ZIP 基准 × 户型系数 × 装修调整）<span style="float:right; font-size:9px; opacity:.7;">点击行内编辑</span></div>
-                <div id="ub-rows-${p.id}">
-                ${rent.unitDetails.map((ud, idx) => `
-                  <div class="ub-row" data-idx="${idx}">
-                    <span class="ub-type">${ud.beds ?? '?'}b${ud.baths ?? '?'}ba × ${ud.count}户 ${ud.hasActual ? '<span style="color:var(--approve); font-weight:700;">实际租金</span>' : (ud.adjustPct?`(${ud.adjustPct>0?'+':''}${ud.adjustPct}%)`:'')}<span class="ub-edit-hint">✏️</span></span>
+              <div class="unit-breakdown">
+                <div class="ub-header">按户型分别估算（ZIP 基准 × 户型系数 × 装修调整）</div>
+                ${rent.unitDetails.map(ud => `
+                  <div class="ub-row">
+                    <span class="ub-type">${ud.beds}b${ud.baths}ba × ${ud.count}户 ${ud.hasActual ? '<span style="color:var(--approve); font-weight:700;">实际租金</span>' : (ud.adjustPct?`(${ud.adjustPct>0?'+':''}${ud.adjustPct}%)`:'')}</span>
                     <span class="ub-rent">${fmt(ud.perUnitAdj)}/户 → ${fmt(ud.groupTotal)}</span>
                   </div>
                 `).join('')}
-                </div>
                 <div class="ub-total">合计 ${fmt(rent.total)}/mo</div>
               </div>
-              <div style="margin-top:4px; display:flex; gap:6px; align-items:center;">
-                <button type="button" class="ghost small ub-add-btn" data-prop-id="${p.id}" style="font-size:11px;">+ 添加户型</button>
-              </div>
-              <div style="margin-top:6px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">${p._unitLayoutEvenSplit ? '⚠ 户型是自动均分的，可能不准确 — 点击上方行修改' : p._descOverrideUnits ? '⚠ 已按描述修正户型分配，请确认 — 点击上方行查看' : '点击户型行可直接编辑户型和实际租金'}</div>
+              <div style="margin-top:6px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">${p._unitLayoutEvenSplit ? '⚠ 户型是自动均分的，可能不准确 — 点"编辑"按实际户型修改' : p._descOverrideUnits ? '⚠ 已按描述修正户型分配，请确认 — 点"编辑"查看' : '户型与装修调整在"编辑"里按户设置'}</div>
             ` : `
               <div style="font-family:'IBM Plex Mono',monospace; font-size:13px;">
                 comps 均值 ${fmt(rent.base)} → 装修调整后 <b>${fmt(rent.adj)}</b>${rent.units>1?`/unit × ${rent.units} units = <b>${fmt(rent.total)}</b>/mo`:''}
@@ -1528,32 +1434,6 @@
     });
     card.querySelector('.btn-edit').addEventListener('click', ()=>openForm(p));
     card.querySelector('.ai-file').addEventListener('change', (e)=>handleAIAnalyze(e, p, card));
-
-    // Inline unit-layout editing on card
-    card.querySelectorAll('.ub-row').forEach(ubRow => {
-      ubRow.addEventListener('click', (e) => {
-        // Don't trigger if clicking the edit hint itself (it's decorative)
-        const idx = +ubRow.dataset.idx;
-        startInlineUnitEdit(p, idx, ubRow);
-      });
-    });
-    const ubAddBtn = card.querySelector('.ub-add-btn');
-    if(ubAddBtn) {
-      ubAddBtn.addEventListener('click', () => {
-        // Add a new empty layout row and immediately edit it
-        if(!p.unitLayouts) p.unitLayouts = [];
-        p.unitLayouts.push({beds: 2, baths: 1, count: 1, rentAdjustPct: 0, actualRent: 0});
-        saveProperties(); render();
-        // After re-render, find the new row and open it for editing
-        setTimeout(() => {
-          const newCard = document.querySelector(`[data-prop-id="${p.id}"]`);
-          if(newCard) {
-            const rows = newCard.querySelectorAll('.ub-row');
-            if(rows.length) startInlineUnitEdit(p, rows.length - 1, rows[rows.length - 1]);
-          }
-        }, 0);
-      });
-    }
 
     return card;
   }
