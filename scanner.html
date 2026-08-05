@@ -77,6 +77,17 @@ a:hover{text-decoration:underline}
 @keyframes spin{to{transform:rotate(360deg)}}
 .expand-row{font-size:11px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);background:rgba(88,166,255,.03)}
 .expand-row .detail{font-family:var(--mono);font-size:10px;margin:4px 0}
+.unit-editor{margin:8px 0;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px}
+.unit-editor-title{font-size:11px;font-weight:600;color:var(--text);margin-bottom:6px}
+.unit-edit-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--border)}
+.unit-edit-row:last-child{border-bottom:none}
+.unit-edit-row input{width:50px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 6px;text-align:center}
+.unit-edit-row input.ue-rent{width:80px}
+.unit-edit-row .ue-label{font-size:10px;color:var(--muted);min-width:30px}
+.unit-edit-row .ue-preview{font-family:var(--mono);font-size:10px;color:var(--accent);margin-left:auto}
+.unit-edit-row .ue-del{background:none;border:none;color:var(--fail);cursor:pointer;font-size:14px;padding:0 4px}
+.unit-edit-add{margin-top:6px}
+.unit-edit-total{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent);margin-top:6px}
 </style>
 </head>
 <body>
@@ -506,14 +517,25 @@ function normalizeListing(item,city){
 }
 
 function analyzeListing(l){
-  // Infer units
-  l.estUnits = Math.max(1,inferUnits(l.beds,l.baths));
-  const bedsPerUnit = Math.max(1,Math.round(l.beds/l.estUnits));
-  const bathsPerUnit = Math.max(1,Math.round(l.baths/l.estUnits));
-  
-  // Estimate per-unit rent
-  const perUnitRent = estimatePerUnitRent(l.zip,bedsPerUnit,bathsPerUnit)||0;
-  l.estMonthlyRent = perUnitRent * l.estUnits;
+  // If user has set custom unitLayouts, use them; otherwise infer
+  if(l.unitLayouts && l.unitLayouts.length){
+    let totalRent = 0;
+    for(const lu of l.unitLayouts){
+      const count = lu.count||1;
+      const hasActual = lu.actualRent > 0;
+      const perUnit = hasActual ? lu.actualRent : (estimatePerUnitRent(l.zip, lu.beds||2, lu.baths||1)||0);
+      totalRent += perUnit * count;
+    }
+    l.estUnits = l.unitLayouts.reduce((s,lu)=>s+(lu.count||1),0);
+    l.estMonthlyRent = totalRent;
+  } else {
+    // Infer units
+    l.estUnits = Math.max(1,inferUnits(l.beds,l.baths));
+    const bedsPerUnit = Math.max(1,Math.round(l.beds/l.estUnits));
+    const bathsPerUnit = Math.max(1,Math.round(l.baths/l.estUnits));
+    const perUnitRent = estimatePerUnitRent(l.zip,bedsPerUnit,bathsPerUnit)||0;
+    l.estMonthlyRent = perUnitRent * l.estUnits;
+  }
   
   // PITI
   const piti = calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip);
@@ -592,21 +614,24 @@ function renderTable(){
   };
   
   tbody.innerHTML = filtered.map((l,i)=>{
+    const origIdx = allListings.indexOf(l);
     const rowClass = l.isNew?'new-row':(l.status+'-row');
     const statusIcon = l.status==='pass'?'✅':(l.status==='warn'?'⚠':'❌');
     const coveragePct = (l.coverage*100).toFixed(0)+'%';
     const bedsLabel = l.beds+'b/'+l.baths+'ba';
     const unitsLabel = l.estUnits>1?`${l.estUnits}户 (${Math.round(l.beds/l.estUnits)}b${Math.round(l.baths/l.estUnits)}ba/户)`:'1户';
+    const hasCustomLayout = l.unitLayouts && l.unitLayouts.length;
+    const editBadge = hasCustomLayout ? '<span style="color:var(--accent);font-size:9px;margin-left:2px">✏️</span>' : '';
     const newBadge = l.isNew?'<span style="background:var(--accent);color:#000;font-size:9px;padding:1px 5px;border-radius:8px;margin-left:4px;font-weight:700">NEW</span>':'';
     
-    return `<tr class="${rowClass}" onclick="toggleDetail(${i})">
+    return `<tr class="${rowClass}" onclick="toggleDetail(${origIdx})">
       <td>${statusIcon}${newBadge}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${l.address}</td>
       <td>${l.city}</td>
       <td>${l.zip||'?'}</td>
       <td>${fmt(l.price)}</td>
       <td>${bedsLabel}</td>
-      <td>${unitsLabel}</td>
+      <td style="cursor:pointer" title="点击展开编辑户型">${unitsLabel}${editBadge}</td>
       <td>${fmt(l.estMonthlyRent)}/mo</td>
       <td>${fmt(l.piti)}/mo</td>
       <td style="font-weight:700;color:${l.status==='pass'?'var(--pass)':l.status==='warn'?'var(--warn)':'var(--fail)'}">${coveragePct}</td>
@@ -614,21 +639,148 @@ function renderTable(){
       <td>${l.daysOnMarket>0?l.daysOnMarket+'d':'New'}</td>
       <td>${l.detailUrl?`<a href="${l.detailUrl}" target="_blank" onclick="event.stopPropagation()">Zillow →</a>`:'—'}</td>
     </tr>
-    <tr id="detail-${i}" class="expand-row" style="display:none" onclick="event.stopPropagation()">
-      <td colspan="13">
-        <div class="detail">估算详情：每户 ${fmt(l.estMonthlyRent/l.estUnits)}/mo × ${l.estUnits}户 = ${fmt(l.estMonthlyRent)}/mo ｜ 
-        PITI: ${fmt(l.piti)}/mo (PI ${fmt(l.piti?calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip).pi:0)} + Tax ${fmt(l.piti?calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip).taxMo:0)} + Ins ${fmt(l.piti?calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip).insMo:0)}) ｜
-        覆盖率 = ${config.coverageRatio} × ${fmt(l.estMonthlyRent)} / ${fmt(l.piti)} = ${(l.coverage*100).toFixed(1)}%
-        ${l.sqft?`｜ ${l.sqft.toLocaleString()} sqft` : ''}
-        </div>
-      </td>
+    <tr id="detail-${origIdx}" class="expand-row" style="display:none" onclick="event.stopPropagation()">
+      <td colspan="13" id="detail-cell-${origIdx}"></td>
     </tr>`;
   }).join('');
 }
 
-function toggleDetail(i){
-  const row = $('detail-'+i);
-  if(row) row.style.display = row.style.display==='none'?'':'none';
+function toggleDetail(origIdx){
+  const row = $('detail-'+origIdx);
+  if(!row) return;
+  const isOpen = row.style.display !== 'none';
+  if(isOpen){
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+  renderDetailEditor(origIdx);
+}
+
+function renderDetailEditor(origIdx){
+  const l = allListings[origIdx];
+  if(!l) return;
+  const cell = $('detail-cell-'+origIdx);
+  if(!cell) return;
+  
+  const fmt = n=>n.toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:0});
+  const piti = calcPITI(l.price,config.down,config.rate,config.term,config.taxRate,config.insRate,l.zip);
+  
+  // Initialize unitLayouts if not present — auto-suggest from inferred data
+  if(!l.unitLayouts || !l.unitLayouts.length){
+    const bedsPerUnit = l.estUnits>1 ? Math.max(1,Math.round(l.beds/l.estUnits)) : l.beds;
+    const bathsPerUnit = l.estUnits>1 ? Math.max(1,Math.round(l.baths/l.estUnits)) : l.baths;
+    l.unitLayouts = [{beds:bedsPerUnit, baths:bathsPerUnit, count:l.estUnits, actualRent:0}];
+  }
+  
+  function renderRows(){
+    let html = '<div class="unit-editor-title">户型编辑（点击修改 Bed / Bath / 户数 / 实际租金）</div>';
+    let grandTotal = 0;
+    l.unitLayouts.forEach((lu, idx) => {
+      const count = lu.count||1;
+      const hasActual = lu.actualRent > 0;
+      const perUnit = hasActual ? lu.actualRent : (estimatePerUnitRent(l.zip, lu.beds||2, lu.baths||1)||0);
+      const rowTotal = perUnit * count;
+      grandTotal += rowTotal;
+      html += `<div class="unit-edit-row" data-idx="${idx}">
+        <span class="ue-label">Bed</span>
+        <input type="number" class="ue-beds" value="${lu.beds??''}" step="1" min="0">
+        <span class="ue-label">Bath</span>
+        <input type="number" class="ue-baths" value="${lu.baths??''}" step="0.5" min="0">
+        <span class="ue-label">×户</span>
+        <input type="number" class="ue-count" value="${count}" step="1" min="1">
+        <span class="ue-label" style="margin-left:4px">实际租金$</span>
+        <input type="number" class="ue-rent" value="${lu.actualRent||''}" step="10" min="0" placeholder="选填">
+        <span class="ue-preview">${hasActual?'实际':'参考'} ${fmt(perUnit)}/户 → ${fmt(rowTotal)}</span>
+        <button class="ue-del" onclick="delUnitRow(${origIdx},${idx})">×</button>
+      </div>`;
+    });
+    html += `<div class="unit-edit-total">合计租金：${fmt(grandTotal)}/mo</div>`;
+    html += `<div class="unit-edit-add"><button class="btn small" onclick="addUnitRow(${origIdx})">+ 添加户型</button></div>`;
+    
+    // Detail info
+    html += `<div class="detail" style="margin-top:8px">PITI: ${fmt(l.piti)}/mo (PI ${fmt(piti.pi)} + Tax ${fmt(piti.taxMo)} + Ins ${fmt(piti.insMo)}) ｜ 覆盖率 = ${config.coverageRatio} × ${fmt(grandTotal)} / ${fmt(l.piti)} = ${((config.coverageRatio*grandTotal/l.piti)*100).toFixed(1)}%${l.sqft?` ｜ ${l.sqft.toLocaleString()} sqft`:''}</div>`;
+    
+    cell.innerHTML = html;
+    
+    // Attach input listeners
+    cell.querySelectorAll('.unit-edit-row').forEach(rowEl => {
+      const idx = +rowEl.dataset.idx;
+      rowEl.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const lu = l.unitLayouts[idx];
+          if(!lu) return;
+          lu.beds = +(rowEl.querySelector('.ue-beds').value) || 0;
+          lu.baths = +(rowEl.querySelector('.ue-baths').value) || 0;
+          lu.count = Math.max(1, +(rowEl.querySelector('.ue-count').value) || 1);
+          lu.actualRent = +(rowEl.querySelector('.ue-rent').value) || 0;
+          // Re-analyze and re-render just this editor + the table row above
+          analyzeListing(l);
+          saveAll();
+          renderRows();
+          // Update the parent row's displayed values
+          updateParentRow(origIdx);
+        });
+        inp.addEventListener('keydown', (e) => {
+          if(e.key === 'Enter') inp.blur();
+        });
+      });
+    });
+  }
+  
+  renderRows();
+}
+
+function updateParentRow(origIdx){
+  const l = allListings[origIdx];
+  if(!l) return;
+  const row = document.querySelector(`tr[onclick="toggleDetail(${origIdx})"]`);
+  if(!row) return;
+  const cells = row.querySelectorAll('td');
+  const fmt = n=>n.toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:0});
+  const fmtCF = n=>{const s=n>=0?'+':'-';return s+Math.abs(Math.round(n)).toLocaleString();};
+  // cells: [status, address, city, zip, price, beds, units, rent, piti, coverage, cashflow, days, action]
+  if(cells[6]) cells[6].innerHTML = `${l.estUnits}户${l.unitLayouts&&l.unitLayouts.length?'<span style="color:var(--accent);font-size:9px;margin-left:2px">✏️</span>':''}`;
+  if(cells[7]) cells[7].innerText = fmt(l.estMonthlyRent)+'/mo';
+  if(cells[8]) cells[8].innerText = fmt(l.piti)+'/mo';
+  const covPct = (l.coverage*100).toFixed(0)+'%';
+  if(cells[9]){
+    cells[9].innerText = covPct;
+    cells[9].style.color = l.status==='pass'?'var(--pass)':l.status==='warn'?'var(--warn)':'var(--fail)';
+  }
+  if(cells[10]) cells[10].innerText = fmtCF(l.netCashflow)+'/mo';
+  // Update row class
+  row.className = l.isNew?'new-row':(l.status+'-row');
+  // Update stats
+  renderStats();
+}
+
+function addUnitRow(origIdx){
+  const l = allListings[origIdx];
+  if(!l) return;
+  if(!l.unitLayouts) l.unitLayouts = [];
+  l.unitLayouts.push({beds:2, baths:1, count:1, actualRent:0});
+  analyzeListing(l);
+  saveAll();
+  renderDetailEditor(origIdx);
+  updateParentRow(origIdx);
+}
+
+function delUnitRow(origIdx, unitIdx){
+  const l = allListings[origIdx];
+  if(!l || !l.unitLayouts) return;
+  l.unitLayouts.splice(unitIdx, 1);
+  if(l.unitLayouts.length === 0){
+    // Reset to inferred
+    l.unitLayouts = null;
+    const bedsPerUnit = l.estUnits>1 ? Math.max(1,Math.round(l.beds/l.estUnits)) : l.beds;
+    const bathsPerUnit = l.estUnits>1 ? Math.max(1,Math.round(l.baths/l.estUnits)) : l.baths;
+    l.unitLayouts = [{beds:bedsPerUnit, baths:bathsPerUnit, count:l.estUnits, actualRent:0}];
+  }
+  analyzeListing(l);
+  saveAll();
+  renderDetailEditor(origIdx);
+  updateParentRow(origIdx);
 }
 
 function renderHistory(){
