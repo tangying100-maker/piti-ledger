@@ -229,6 +229,12 @@
   .margin-box .big{font-size:20px; font-weight:700;}
   .margin-box .cap{font-size:11px; text-transform:uppercase; letter-spacing:1px; opacity:0.85;}
 
+  .year-return-table{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:11px; white-space:nowrap;}
+  .year-return-table th{text-align:right; font-weight:600; color:var(--slate); padding:4px 8px; border-bottom:1.5px solid var(--line); text-transform:uppercase; letter-spacing:0.5px; font-size:9.5px;}
+  .year-return-table th:first-child, .year-return-table td:first-child{text-align:left;}
+  .year-return-table td{text-align:right; padding:4px 8px; border-bottom:1px dotted var(--line);}
+  .year-return-table tr:last-child td{border-bottom:none;}
+
   .rent-block{margin-top:12px;}
   .rent-block h4{
     font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:var(--slate);
@@ -371,11 +377,14 @@
       <div class="field"><label>房产税率 %/年</label><input type="number" id="a-tax" value="0.65" step="0.01"></div>
       <div class="field"><label>保险 %/年（按房价）</label><input type="number" id="a-ins" value="0.35" step="0.01"></div>
       <div class="field"><label>HOA 月费 $</label><input type="number" id="a-hoa" value="0" step="5"></div>
-      <div class="field"><label>IRR 持有年限（年）</label><input type="number" id="a-hold-years" value="5" step="1"></div>
-      <div class="field"><label>IRR 年租金增长率 %</label><input type="number" id="a-rent-growth" value="3" step="0.5"></div>
-      <div class="field"><label>IRR 年房价增值率 %</label><input type="number" id="a-appreciation" value="3" step="0.5"></div>
-      <div class="field"><label>IRR 卖出成本 %（佣金+过户费）</label><input type="number" id="a-sell-cost" value="7" step="0.5"></div>
-      <div class="field"><label>IRR 买入成本 %（过户费等）</label><input type="number" id="a-buy-cost" value="2" step="0.5"></div>
+      <div class="field"><label>IRR 显示年数（不卖，按年市值估算）</label><input type="number" id="a-hold-years" value="10" step="1"></div>
+      <div class="field"><label>年租金增长率 %</label><input type="number" id="a-rent-growth" value="3" step="0.5"></div>
+      <div class="field"><label>年房价增值率 %（不卖，仅按市值折算权益）</label><input type="number" id="a-appreciation" value="3" step="0.5"></div>
+      <div class="field"><label>买入成本 %（过户费等）</label><input type="number" id="a-buy-cost" value="2" step="0.5"></div>
+      <div class="field"><label>边际税率 %（用于折旧抵税）</label><input type="number" id="a-tax-rate" value="32" step="1"></div>
+      <div class="field"><label>土地价值占比 %（不可折旧）</label><input type="number" id="a-land-pct" value="20" step="1"></div>
+      <div class="field"><label>Cost Seg 短期资产占比 %（估算，需真实study核实）</label><input type="number" id="a-costseg-pct" value="25" step="1"></div>
+      <div class="field"><label>Bonus 折旧比例 %（请与 CPA 核实当年实际比例）</label><input type="number" id="a-bonus-pct" value="60" step="5"></div>
       <div class="field"><label>RentCast API Key</label><input type="password" id="a-rentcast-key" placeholder="用于 Zillow 链接自动填充" autocomplete="off"></div>
       <div class="field"><label>Anthropic API Key</label><input type="password" id="a-anthropic-key" placeholder="用于照片装修分析（付费）" autocomplete="off"></div>
       <div class="field"><label>Google Gemini API Key（免费）</label><input type="password" id="a-gemini-key" placeholder="免费替代方案，见 aistudio.google.com" autocomplete="off"></div>
@@ -505,7 +514,8 @@
   }
   let properties = [];
   let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7,
-    holdYears:5, rentGrowthPct:3, appreciationPct:3, sellCostPct:7, buyCostPct:2};
+    holdYears:10, rentGrowthPct:3, appreciationPct:3, buyCostPct:2,
+    marginalTaxPct:32, landValuePct:20, costSegPct:25, bonusDeprecPct:60};
   let editingId = null;
   let coverageRatio = 0.7;
 
@@ -538,7 +548,13 @@
   async function loadAll(){
     try{
       const a = localStorage.getItem('piti-assumptions');
-      if(a) assumptions = JSON.parse(a);
+      // Merge saved data ON TOP OF the in-code defaults rather than
+      // replacing them outright -- otherwise a saved blob from before a
+      // new assumption field existed (e.g. marginalTaxPct/rentGrowthPct
+      // added for IRR) silently leaves that field `undefined`, which reads
+      // as 0 everywhere it's used, quietly zeroing out an entire feature
+      // instead of falling back to a sensible default.
+      if(a) assumptions = {...assumptions, ...JSON.parse(a)};
     }catch(e){ /* not set yet */ }
     coverageRatio = assumptions.coverageRatio || 0.7;
     try{
@@ -580,8 +596,11 @@
     $('a-hold-years').value = assumptions.holdYears;
     $('a-rent-growth').value = assumptions.rentGrowthPct;
     $('a-appreciation').value = assumptions.appreciationPct;
-    $('a-sell-cost').value = assumptions.sellCostPct;
     $('a-buy-cost').value = assumptions.buyCostPct;
+    $('a-tax-rate').value = assumptions.marginalTaxPct;
+    $('a-land-pct').value = assumptions.landValuePct;
+    $('a-costseg-pct').value = assumptions.costSegPct;
+    $('a-bonus-pct').value = assumptions.bonusDeprecPct;
     $('a-rentcast-key').value = assumptions.rentcastKey || '';
     $('a-anthropic-key').value = assumptions.anthropicKey || '';
     $('a-gemini-key').value = assumptions.geminiKey || '';
@@ -594,14 +613,16 @@
       p.style.color = active ? '#fff' : '';
     });
   }
-  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-hold-years','a-rent-growth','a-appreciation','a-sell-cost','a-buy-cost','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
+  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-hold-years','a-rent-growth','a-appreciation','a-buy-cost','a-tax-rate','a-land-pct','a-costseg-pct','a-bonus-pct','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
     $(id).addEventListener('change', ()=>{
       assumptions = {
         down:+$('a-down').value, rate:+$('a-rate').value, term:+$('a-term').value,
         tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value,
         holdYears:+$('a-hold-years').value, rentGrowthPct:+$('a-rent-growth').value,
-        appreciationPct:+$('a-appreciation').value, sellCostPct:+$('a-sell-cost').value,
+        appreciationPct:+$('a-appreciation').value,
         buyCostPct:+$('a-buy-cost').value,
+        marginalTaxPct:+$('a-tax-rate').value, landValuePct:+$('a-land-pct').value,
+        costSegPct:+$('a-costseg-pct').value, bonusDeprecPct:+$('a-bonus-pct').value,
         rentcastKey:$('a-rentcast-key').value.trim(),
         anthropicKey:$('a-anthropic-key').value.trim(),
         geminiKey:$('a-gemini-key').value.trim(),
@@ -1275,52 +1296,89 @@
     return (lo + hi) / 2;
   }
 
-  // Projects a simple annual cash-flow series over a holding period and
-  // solves for IRR: year-0 outlay is down payment + buy costs; each
-  // subsequent year's cash flow is (rent - PITI) with rent grown at
-  // rentGrowthPct/yr (PITI held flat — P&I is fixed by the loan, and this
-  // keeps tax/insurance drift as a known simplification rather than an
-  // invented assumption); the final year adds net sale proceeds (price
-  // appreciated at appreciationPct/yr, minus sell costs and the mortgage's
-  // remaining balance at that point, via the standard amortization formula).
-  // Deliberately excludes vacancy/maintenance/capex reserves -- this uses
-  // the exact same "rent - PITI" cash flow already shown elsewhere on the
-  // card (the margin figure), just projected forward and combined with a
-  // sale, rather than introducing a new unexplained expense assumption.
-  function estimateIRR(p, rentTotal){
+  // Year-by-year return table for a buy-and-hold (no planned sale)
+  // investor. For each year Y in the holding window:
+  //   - operatingCF: (rent - PITI) for that year, rent grown at
+  //     rentGrowthPct/yr, PITI held flat.
+  //   - depreciation-driven tax savings added to get an after-tax cash flow
+  //     and an after-tax cash-on-cash return (afterTaxCF / initial cash).
+  //   - equity: price appreciated at appreciationPct/yr minus the
+  //     mortgage's remaining balance at that point (standard amortization
+  //     formula) -- an unrealized, mark-to-market figure, NOT a sale
+  //     proceeds figure. No selling costs are applied anywhere, since
+  //     she's not selling.
+  //   - irrThroughYear: the IRR of [-initialCash, cf_1, ..., cf_(Y-1),
+  //     cf_Y + equity_Y] -- i.e. "what total-return rate would this
+  //     represent if I paused and marked the property to market at year Y,"
+  //     not an actual realized return.
+  //
+  // Cost segregation + bonus depreciation (year 1 only): buildingBasis =
+  // price x (1 - landValuePct); costSegAmount = buildingBasis x
+  // costSegPct is the portion assumed reclassifiable into short-life
+  // (5/7/15-yr) property; bonusDeprecPct of THAT is fully expensed in
+  // year 1. This is a planning-level estimate using percentages she
+  // supplies (and should verify against a real engineering cost
+  // segregation study and her CPA) -- not a MACRS 200%-declining-balance
+  // schedule. The non-bonus remainder of the cost-seg portion, plus the
+  // building shell itself, are both straight-lined (over a rough blended
+  // 15 years and the standard 27.5 years respectively) for years 2+,
+  // rather than modeling each 5/7/15-year asset class's exact schedule.
+  function estimateAnnualReturns(p, rentTotal){
     if(!rentTotal) return null;
-    const years = assumptions.holdYears || 5;
+    const years = assumptions.holdYears || 10;
     const rentGrowth = (assumptions.rentGrowthPct || 0) / 100;
     const apprRate = (assumptions.appreciationPct || 0) / 100;
-    const sellCostPct = (assumptions.sellCostPct || 0) / 100;
     const buyCostPct = (assumptions.buyCostPct || 0) / 100;
+    const taxRate = (assumptions.marginalTaxPct || 0) / 100;
+    const landPct = (assumptions.landValuePct || 0) / 100;
+    const costSegPct = (assumptions.costSegPct || 0) / 100;
+    const bonusPct = (assumptions.bonusDeprecPct || 0) / 100;
 
     const piti = calcPITI(p);
     const down = p.price * p.down / 100;
     const buyCosts = p.price * buyCostPct;
+    const initialCash = down + buyCosts;
     const loan = p.price * (1 - p.down / 100);
     const r = p.rate / 100 / 12;
     const nTotalMonths = p.term * 12;
     const annualPITI = piti.total * 12;
 
-    const cashflows = [-(down + buyCosts)];
+    const buildingBasis = p.price * (1 - landPct);
+    const costSegAmount = buildingBasis * costSegPct;
+    const bonusDeprecYear1 = costSegAmount * bonusPct;
+    const costSegRemainder = costSegAmount - bonusDeprecYear1;
+    const straightLineBuilding = (buildingBasis - costSegAmount) / 27.5;
+    const straightLineCostSegRemainder = costSegRemainder / 15;
+    const deprecAfterYear1 = straightLineBuilding + straightLineCostSegRemainder;
+    const deprecYear1 = bonusDeprecYear1 + deprecAfterYear1;
+
+    const rows = [];
     let annualRent = rentTotal * 12;
     for(let yr = 1; yr <= years; yr++){
-      let cf = annualRent - annualPITI;
-      if(yr === years){
-        const salePrice = p.price * Math.pow(1 + apprRate, years);
-        const sellCosts = salePrice * sellCostPct;
-        const monthsElapsed = years * 12;
-        let remainingBalance;
-        if(r === 0) remainingBalance = loan * (1 - monthsElapsed / nTotalMonths);
-        else remainingBalance = loan * (Math.pow(1+r, nTotalMonths) - Math.pow(1+r, monthsElapsed)) / (Math.pow(1+r, nTotalMonths) - 1);
-        remainingBalance = Math.max(0, remainingBalance);
-        cf += salePrice - sellCosts - remainingBalance;
-      }
-      cashflows.push(cf);
+      const operatingCF = annualRent - annualPITI;
+      const depreciation = yr === 1 ? deprecYear1 : deprecAfterYear1;
+      const taxSavings = depreciation * taxRate;
+      const afterTaxCF = operatingCF + taxSavings;
+
+      const monthsElapsed = yr * 12;
+      let remainingBalance;
+      if(r === 0) remainingBalance = loan * (1 - monthsElapsed / nTotalMonths);
+      else remainingBalance = loan * (Math.pow(1+r, nTotalMonths) - Math.pow(1+r, monthsElapsed)) / (Math.pow(1+r, nTotalMonths) - 1);
+      remainingBalance = Math.max(0, remainingBalance);
+      const equity = p.price * Math.pow(1 + apprRate, yr) - remainingBalance;
+
+      rows.push({
+        year: yr, operatingCF, depreciation, taxSavings, afterTaxCF, equity,
+        cashOnCash: initialCash > 0 ? afterTaxCF / initialCash : null,
+      });
       annualRent *= (1 + rentGrowth);
     }
-    return { irr: solveIRR(cashflows), years, cashflows };
+    for(const row of rows){
+      const series = [-initialCash, ...rows.slice(0, row.year).map(x => x.afterTaxCF)];
+      series[series.length - 1] += row.equity;
+      row.irrThroughYear = solveIRR(series);
+    }
+    return { years, initialCash, rows, deprecYear1, bonusDeprecYear1 };
   }
 
   // Multi-family: per-unit-layout rent estimation using ZORI lookup table.
@@ -1409,7 +1467,7 @@
     const pass = threshold >= piti.total && rent.total > 0;
     const margin = threshold - piti.total;
     const suggested = suggestedMaxPrice(p, rent.total, coverageRatio);
-    const irrResult = estimateIRR(p, rent.total);
+    const irrResult = estimateAnnualReturns(p, rent.total);
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -1478,10 +1536,26 @@
             <div class="cap">租金×${coverageRatio.toFixed(2)} − PITI</div>
             <div class="big">${margin>=0?'+':''}${fmt(margin)} /月</div>
           </div>
-          ${irrResult && irrResult.irr != null ? `
-          <div class="margin-box" style="margin-top:8px; background:var(--accent-bg); color:var(--accent); border-color:rgba(8,145,178,0.2);">
-            <div class="cap">预计 IRR（持有 ${irrResult.years} 年，租金+${assumptions.rentGrowthPct}%/年、房价+${assumptions.appreciationPct}%/年，卖出成本 ${assumptions.sellCostPct}%）</div>
-            <div class="big">${(irrResult.irr*100).toFixed(1)}%</div>
+          ${irrResult ? `
+          <div class="rent-block" style="margin-top:10px;">
+            <h4>逐年回报（不卖，按年市值折算权益 · 含 Cost Seg + Bonus 折旧抵税）</h4>
+            <div style="overflow-x:auto;">
+              <table class="year-return-table">
+                <tr><th>年</th><th>税后现金流</th><th>现金回报率</th><th>账面权益</th><th>累计 IRR</th></tr>
+                ${irrResult.rows.map(row => `
+                  <tr>
+                    <td>Y${row.year}</td>
+                    <td>${fmt(row.afterTaxCF)}</td>
+                    <td>${row.cashOnCash!=null ? (row.cashOnCash*100).toFixed(1)+'%' : '—'}</td>
+                    <td>${fmt(row.equity)}</td>
+                    <td>${row.irrThroughYear!=null ? (row.irrThroughYear*100).toFixed(1)+'%' : '—'}</td>
+                  </tr>
+                `).join('')}
+              </table>
+            </div>
+            <div style="font-size:10.5px; color:var(--slate); margin-top:6px; font-family:'IBM Plex Mono',monospace;">
+              Year 1 折旧扣除 ${fmt(irrResult.deprecYear1)}（含 Bonus ${fmt(irrResult.bonusDeprecYear1)}）× 边际税率 ${assumptions.marginalTaxPct}% 计入税后现金流。账面权益 = 市值（房价+${assumptions.appreciationPct}%/年）− 剩余贷款，未扣卖出成本（不卖假设）。Cost Seg / Bonus 比例为估算值，仅供规划参考，请与 CPA 核实实际当年比例与真实 study 结果。
+            </div>
           </div>
           ` : ''}
           <div style="margin-top:10px;">
