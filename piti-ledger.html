@@ -1609,7 +1609,11 @@
             <div class="cap">租金×${coverageRatio.toFixed(2)} − PITI</div>
             <div class="big">${margin>=0?'+':''}${fmt(margin)} /月</div>
           </div>
-          ${irrResult ? `
+          ${!irrResult ? `
+          <div style="margin-top:10px; font-size:11px; color:var(--slate); font-family:'IBM Plex Mono',monospace;">
+            逐年回报未计算：缺少租金数据（估算租金为 $0）。补充 comps、手动租金，或（多户型）户型分配后会自动出现。
+          </div>
+          ` : `
           <div class="rent-block" style="margin-top:10px;">
             <h4>逐年回报（不卖，按年市值折算权益 · 含 Cost Seg + Bonus 折旧抵税）</h4>
             <div style="overflow-x:auto;">
@@ -1635,7 +1639,7 @@
               现金流按租金×${coverageRatio.toFixed(2)}计算（与上方达标线口径一致，扣除空置/维护缓冲），不是满租全额。Year 1 折旧扣除 ${fmt(irrResult.deprecYear1)}（含 Bonus ${fmt(irrResult.bonusDeprecYear1)}）× 边际税率 ${assumptions.marginalTaxPct}% 计入税后现金流。账面权益 = 市值（房价+${assumptions.appreciationPct}%/年）− 剩余贷款，未扣卖出成本（不卖假设）。Cost Seg / Bonus 比例为估算值，仅供规划参考，请与 CPA 核实实际当年比例与真实 study 结果。
             </div>
           </div>
-          ` : ''}
+          `}
           <div style="margin-top:10px;">
             ${(p.imageUrls&&p.imageUrls.length) ? `
               <div class="card-images">
