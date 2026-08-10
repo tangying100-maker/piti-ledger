@@ -1155,7 +1155,7 @@
       const count = +(r.querySelector('.ul-count')?.value) || 0;
       const pct = +(r.querySelector('.ul-pct')?.value) || 0;
       const actualRent = +(r.querySelector('.ul-actual-rent')?.value) || 0;
-      if(count > 0 && (beds > 0 || baths > 0)){
+      if(count > 0 && (beds > 0 || baths > 0 || actualRent > 0)){
         layouts.push({beds, baths, count, rentAdjustPct: pct, actualRent});
       }
     });
