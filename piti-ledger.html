@@ -1353,7 +1353,12 @@
     const deprecYear1 = bonusDeprecYear1 + deprecAfterYear1;
 
     const rows = [];
-    let annualRent = rentTotal * 12;
+    // Use rent x coverageRatio, not full rent -- the same conservative
+    // buffer the pass/fail line (租金x0.7 - PITI) applies for vacancy,
+    // turnover, and maintenance that aren't otherwise modeled. Using full
+    // rent here would let a property that FAILS the pass/fail test still
+    // show a rosy, inconsistent cash-on-cash return on this table.
+    let annualRent = rentTotal * coverageRatio * 12;
     for(let yr = 1; yr <= years; yr++){
       const operatingCF = annualRent - annualPITI;
       const depreciation = yr === 1 ? deprecYear1 : deprecAfterYear1;
@@ -1554,7 +1559,7 @@
               </table>
             </div>
             <div style="font-size:10.5px; color:var(--slate); margin-top:6px; font-family:'IBM Plex Mono',monospace;">
-              Year 1 折旧扣除 ${fmt(irrResult.deprecYear1)}（含 Bonus ${fmt(irrResult.bonusDeprecYear1)}）× 边际税率 ${assumptions.marginalTaxPct}% 计入税后现金流。账面权益 = 市值（房价+${assumptions.appreciationPct}%/年）− 剩余贷款，未扣卖出成本（不卖假设）。Cost Seg / Bonus 比例为估算值，仅供规划参考，请与 CPA 核实实际当年比例与真实 study 结果。
+              现金流按租金×${coverageRatio.toFixed(2)}计算（与上方达标线口径一致，扣除空置/维护缓冲），不是满租全额。Year 1 折旧扣除 ${fmt(irrResult.deprecYear1)}（含 Bonus ${fmt(irrResult.bonusDeprecYear1)}）× 边际税率 ${assumptions.marginalTaxPct}% 计入税后现金流。账面权益 = 市值（房价+${assumptions.appreciationPct}%/年）− 剩余贷款，未扣卖出成本（不卖假设）。Cost Seg / Bonus 比例为估算值，仅供规划参考，请与 CPA 核实实际当年比例与真实 study 结果。
             </div>
           </div>
           ` : ''}
