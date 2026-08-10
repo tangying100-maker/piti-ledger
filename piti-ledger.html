@@ -378,13 +378,21 @@
       <div class="field"><label>保险 %/年（按房价）</label><input type="number" id="a-ins" value="0.35" step="0.01"></div>
       <div class="field"><label>HOA 月费 $</label><input type="number" id="a-hoa" value="0" step="5"></div>
       <div class="field"><label>IRR 显示年数（不卖，按年市值估算）</label><input type="number" id="a-hold-years" value="10" step="1"></div>
-      <div class="field"><label>年租金增长率 %</label><input type="number" id="a-rent-growth" value="3" step="0.5"></div>
-      <div class="field"><label>年房价增值率 %（不卖，仅按市值折算权益）</label><input type="number" id="a-appreciation" value="3" step="0.5"></div>
+      <div class="field full"><label>年租金增长率：<b id="a-rent-growth-val">3.0</b>%</label>
+        <input type="range" id="a-rent-growth" min="-5" max="10" step="0.5" value="3" style="width:100%;">
+      </div>
+      <div class="field full"><label>年房价增值率（不卖，仅按市值折算权益）：<b id="a-appreciation-val">3.0</b>%</label>
+        <input type="range" id="a-appreciation" min="-5" max="10" step="0.5" value="3" style="width:100%;">
+      </div>
       <div class="field"><label>买入成本 %（过户费等）</label><input type="number" id="a-buy-cost" value="2" step="0.5"></div>
       <div class="field"><label>边际税率 %（用于折旧抵税）</label><input type="number" id="a-tax-rate" value="32" step="1"></div>
       <div class="field"><label>土地价值占比 %（不可折旧）</label><input type="number" id="a-land-pct" value="20" step="1"></div>
       <div class="field"><label>Cost Seg 短期资产占比 %（估算，需真实study核实）</label><input type="number" id="a-costseg-pct" value="25" step="1"></div>
       <div class="field"><label>Bonus 折旧比例 %（请与 CPA 核实当年实际比例）</label><input type="number" id="a-bonus-pct" value="60" step="5"></div>
+      <div class="field"><label>Refinance 年份（第几年重新贷款，0=不做）</label><input type="number" id="a-refi-year" value="0" step="1" min="0"></div>
+      <div class="field"><label>Refinance 贷款成数 %（按届时市值）</label><input type="number" id="a-refi-ltv" value="75" step="5"></div>
+      <div class="field"><label>Refinance 新利率 %</label><input type="number" id="a-refi-rate" value="6.5" step="0.05"></div>
+      <div class="field"><label>Refinance 手续费 %（按新贷款额）</label><input type="number" id="a-refi-cost" value="2" step="0.5"></div>
       <div class="field"><label>RentCast API Key</label><input type="password" id="a-rentcast-key" placeholder="用于 Zillow 链接自动填充" autocomplete="off"></div>
       <div class="field"><label>Anthropic API Key</label><input type="password" id="a-anthropic-key" placeholder="用于照片装修分析（付费）" autocomplete="off"></div>
       <div class="field"><label>Google Gemini API Key（免费）</label><input type="password" id="a-gemini-key" placeholder="免费替代方案，见 aistudio.google.com" autocomplete="off"></div>
@@ -515,7 +523,8 @@
   let properties = [];
   let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7,
     holdYears:10, rentGrowthPct:3, appreciationPct:3, buyCostPct:2,
-    marginalTaxPct:32, landValuePct:20, costSegPct:25, bonusDeprecPct:60};
+    marginalTaxPct:32, landValuePct:20, costSegPct:25, bonusDeprecPct:60,
+    refiYear:0, refiLTVPct:75, refiRatePct:6.5, refiCostPct:2};
   let editingId = null;
   let coverageRatio = 0.7;
 
@@ -595,12 +604,18 @@
     $('a-hoa').value = assumptions.hoa;
     $('a-hold-years').value = assumptions.holdYears;
     $('a-rent-growth').value = assumptions.rentGrowthPct;
+    $('a-rent-growth-val').textContent = (+assumptions.rentGrowthPct).toFixed(1);
     $('a-appreciation').value = assumptions.appreciationPct;
+    $('a-appreciation-val').textContent = (+assumptions.appreciationPct).toFixed(1);
     $('a-buy-cost').value = assumptions.buyCostPct;
     $('a-tax-rate').value = assumptions.marginalTaxPct;
     $('a-land-pct').value = assumptions.landValuePct;
     $('a-costseg-pct').value = assumptions.costSegPct;
     $('a-bonus-pct').value = assumptions.bonusDeprecPct;
+    $('a-refi-year').value = assumptions.refiYear;
+    $('a-refi-ltv').value = assumptions.refiLTVPct;
+    $('a-refi-rate').value = assumptions.refiRatePct;
+    $('a-refi-cost').value = assumptions.refiCostPct;
     $('a-rentcast-key').value = assumptions.rentcastKey || '';
     $('a-anthropic-key').value = assumptions.anthropicKey || '';
     $('a-gemini-key').value = assumptions.geminiKey || '';
@@ -613,24 +628,38 @@
       p.style.color = active ? '#fff' : '';
     });
   }
-  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-hold-years','a-rent-growth','a-appreciation','a-buy-cost','a-tax-rate','a-land-pct','a-costseg-pct','a-bonus-pct','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
-    $(id).addEventListener('change', ()=>{
-      assumptions = {
-        down:+$('a-down').value, rate:+$('a-rate').value, term:+$('a-term').value,
-        tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value,
-        holdYears:+$('a-hold-years').value, rentGrowthPct:+$('a-rent-growth').value,
-        appreciationPct:+$('a-appreciation').value,
-        buyCostPct:+$('a-buy-cost').value,
-        marginalTaxPct:+$('a-tax-rate').value, landValuePct:+$('a-land-pct').value,
-        costSegPct:+$('a-costseg-pct').value, bonusDeprecPct:+$('a-bonus-pct').value,
-        rentcastKey:$('a-rentcast-key').value.trim(),
-        anthropicKey:$('a-anthropic-key').value.trim(),
-        geminiKey:$('a-gemini-key').value.trim(),
-        coverageRatio
-      };
-      saveAssumptions();
-      render();
-    });
+  function rebuildAssumptionsFromFields(){
+    assumptions = {
+      down:+$('a-down').value, rate:+$('a-rate').value, term:+$('a-term').value,
+      tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value,
+      holdYears:+$('a-hold-years').value, rentGrowthPct:+$('a-rent-growth').value,
+      appreciationPct:+$('a-appreciation').value,
+      buyCostPct:+$('a-buy-cost').value,
+      marginalTaxPct:+$('a-tax-rate').value, landValuePct:+$('a-land-pct').value,
+      costSegPct:+$('a-costseg-pct').value, bonusDeprecPct:+$('a-bonus-pct').value,
+      refiYear:+$('a-refi-year').value, refiLTVPct:+$('a-refi-ltv').value,
+      refiRatePct:+$('a-refi-rate').value, refiCostPct:+$('a-refi-cost').value,
+      rentcastKey:$('a-rentcast-key').value.trim(),
+      anthropicKey:$('a-anthropic-key').value.trim(),
+      geminiKey:$('a-gemini-key').value.trim(),
+      coverageRatio
+    };
+    saveAssumptions();
+    render();
+  }
+  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-hold-years','a-buy-cost','a-tax-rate','a-land-pct','a-costseg-pct','a-bonus-pct','a-refi-year','a-refi-ltv','a-refi-rate','a-refi-cost','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
+    $(id).addEventListener('change', rebuildAssumptionsFromFields);
+  });
+  // Rent growth / appreciation are sliders -- use 'input' so dragging gives
+  // live feedback (both the % label next to the slider and every card's
+  // numbers update continuously), not just on release.
+  $('a-rent-growth').addEventListener('input', ()=>{
+    $('a-rent-growth-val').textContent = (+$('a-rent-growth').value).toFixed(1);
+    rebuildAssumptionsFromFields();
+  });
+  $('a-appreciation').addEventListener('input', ()=>{
+    $('a-appreciation-val').textContent = (+$('a-appreciation').value).toFixed(1);
+    rebuildAssumptionsFromFields();
   });
   // Coverage ratio pills
   document.querySelectorAll('.ratio-set').forEach(pill=>{
@@ -1323,6 +1352,20 @@
   // building shell itself, are both straight-lined (over a rough blended
   // 15 years and the standard 27.5 years respectively) for years 2+,
   // rather than modeling each 5/7/15-year asset class's exact schedule.
+  // Standard amortization remaining-balance formula, factored out so it can
+  // be applied to either the original loan or a post-refinance loan.
+  function loanRemainingBalance(loanAmt, rMonthly, termMonths, monthsElapsed){
+    if(termMonths <= 0) return 0;
+    if(rMonthly === 0) return Math.max(0, loanAmt * (1 - monthsElapsed / termMonths));
+    const bal = loanAmt * (Math.pow(1+rMonthly, termMonths) - Math.pow(1+rMonthly, monthsElapsed)) / (Math.pow(1+rMonthly, termMonths) - 1);
+    return Math.max(0, bal);
+  }
+  function loanAnnualPI(loanAmt, rMonthly, termMonths){
+    if(termMonths <= 0) return 0;
+    const monthlyPI = rMonthly === 0 ? loanAmt / termMonths : loanAmt * rMonthly / (1 - Math.pow(1+rMonthly, -termMonths));
+    return monthlyPI * 12;
+  }
+
   function estimateAnnualReturns(p, rentTotal){
     if(!rentTotal) return null;
     const years = assumptions.holdYears || 10;
@@ -1333,15 +1376,27 @@
     const landPct = (assumptions.landValuePct || 0) / 100;
     const costSegPct = (assumptions.costSegPct || 0) / 100;
     const bonusPct = (assumptions.bonusDeprecPct || 0) / 100;
+    // Refinance (optional, refiYear=0 disables it): at the start of that
+    // year, pay off the ORIGINAL loan's remaining balance out of a NEW loan
+    // sized to refiLTVPct of the market value at that point, pocket the
+    // difference (minus refi closing costs) as a tax-free cash-out (loan
+    // proceeds aren't taxable income), and switch P&I to the new loan's
+    // payment (a fresh full term) for every year from then on.
+    const refiYear = assumptions.refiYear || 0;
+    const refiLTV = (assumptions.refiLTVPct || 0) / 100;
+    const refiR = (assumptions.refiRatePct || 0) / 100 / 12;
+    const refiCostPct = (assumptions.refiCostPct || 0) / 100;
 
     const piti = calcPITI(p);
     const down = p.price * p.down / 100;
     const buyCosts = p.price * buyCostPct;
     const initialCash = down + buyCosts;
-    const loan = p.price * (1 - p.down / 100);
-    const r = p.rate / 100 / 12;
-    const nTotalMonths = p.term * 12;
-    const annualPITI = piti.total * 12;
+    const origLoan = p.price * (1 - p.down / 100);
+    const origR = p.rate / 100 / 12;
+    const origTermMonths = p.term * 12;
+    const nonPIAnnual = (piti.tax + piti.ins + piti.hoa) * 12; // unaffected by refi
+    const origAnnualPI = piti.pi * 12;
+    const refiTermMonths = p.term * 12; // refi resets to a fresh full term
 
     const buildingBasis = p.price * (1 - landPct);
     const costSegAmount = buildingBasis * costSegPct;
@@ -1352,6 +1407,8 @@
     const deprecAfterYear1 = straightLineBuilding + straightLineCostSegRemainder;
     const deprecYear1 = bonusDeprecYear1 + deprecAfterYear1;
 
+    let newLoanAmt = null;
+    let refiDetail = null;
     const rows = [];
     // Use rent x coverageRatio, not full rent -- the same conservative
     // buffer the pass/fail line (租金x0.7 - PITI) applies for vacancy,
@@ -1360,20 +1417,31 @@
     // show a rosy, inconsistent cash-on-cash return on this table.
     let annualRent = rentTotal * coverageRatio * 12;
     for(let yr = 1; yr <= years; yr++){
+      let refiCashOut = 0;
+      if(refiYear > 0 && yr === refiYear){
+        const marketValueAtRefi = p.price * Math.pow(1 + apprRate, yr);
+        const oldBalance = loanRemainingBalance(origLoan, origR, origTermMonths, yr*12);
+        newLoanAmt = marketValueAtRefi * refiLTV;
+        const refiCosts = newLoanAmt * refiCostPct;
+        refiCashOut = newLoanAmt - oldBalance - refiCosts;
+        refiDetail = { year: yr, marketValueAtRefi, oldBalance, newLoanAmt, refiCosts, refiCashOut };
+      }
+
+      const refinanced = refiYear > 0 && yr >= refiYear;
+      const currentAnnualPI = refinanced ? loanAnnualPI(newLoanAmt, refiR, refiTermMonths) : origAnnualPI;
+      const equityLoanBalance = refinanced
+        ? loanRemainingBalance(newLoanAmt, refiR, refiTermMonths, (yr - refiYear) * 12)
+        : loanRemainingBalance(origLoan, origR, origTermMonths, yr * 12);
+
+      const annualPITI = currentAnnualPI + nonPIAnnual;
       const operatingCF = annualRent - annualPITI;
       const depreciation = yr === 1 ? deprecYear1 : deprecAfterYear1;
       const taxSavings = depreciation * taxRate;
-      const afterTaxCF = operatingCF + taxSavings;
-
-      const monthsElapsed = yr * 12;
-      let remainingBalance;
-      if(r === 0) remainingBalance = loan * (1 - monthsElapsed / nTotalMonths);
-      else remainingBalance = loan * (Math.pow(1+r, nTotalMonths) - Math.pow(1+r, monthsElapsed)) / (Math.pow(1+r, nTotalMonths) - 1);
-      remainingBalance = Math.max(0, remainingBalance);
-      const equity = p.price * Math.pow(1 + apprRate, yr) - remainingBalance;
+      const afterTaxCF = operatingCF + taxSavings + refiCashOut;
+      const equity = p.price * Math.pow(1 + apprRate, yr) - equityLoanBalance;
 
       rows.push({
-        year: yr, operatingCF, depreciation, taxSavings, afterTaxCF, equity,
+        year: yr, operatingCF, depreciation, taxSavings, refiCashOut, afterTaxCF, equity,
         cashOnCash: initialCash > 0 ? afterTaxCF / initialCash : null,
       });
       annualRent *= (1 + rentGrowth);
@@ -1383,7 +1451,7 @@
       series[series.length - 1] += row.equity;
       row.irrThroughYear = solveIRR(series);
     }
-    return { years, initialCash, rows, deprecYear1, bonusDeprecYear1 };
+    return { years, initialCash, rows, deprecYear1, bonusDeprecYear1, refiDetail };
   }
 
   // Multi-family: per-unit-layout rent estimation using ZORI lookup table.
@@ -1548,9 +1616,9 @@
               <table class="year-return-table">
                 <tr><th>年</th><th>税后现金流</th><th>现金回报率</th><th>账面权益</th><th>累计 IRR</th></tr>
                 ${irrResult.rows.map(row => `
-                  <tr>
-                    <td>Y${row.year}</td>
-                    <td>${fmt(row.afterTaxCF)}</td>
+                  <tr${row.refiCashOut ? ' style="background:var(--accent-bg);"' : ''}>
+                    <td>Y${row.year}${row.refiCashOut ? ' 🔁' : ''}</td>
+                    <td>${fmt(row.afterTaxCF)}${row.refiCashOut ? `<br><span style="font-weight:400; font-size:9.5px; color:var(--accent);">含 Refi ${fmt(row.refiCashOut)}</span>` : ''}</td>
                     <td>${row.cashOnCash!=null ? (row.cashOnCash*100).toFixed(1)+'%' : '—'}</td>
                     <td>${fmt(row.equity)}</td>
                     <td>${row.irrThroughYear!=null ? (row.irrThroughYear*100).toFixed(1)+'%' : '—'}</td>
@@ -1558,6 +1626,11 @@
                 `).join('')}
               </table>
             </div>
+            ${irrResult.refiDetail ? `
+            <div style="font-size:10.5px; color:var(--accent); margin-top:6px; font-family:'IBM Plex Mono',monospace;">
+              🔁 Year ${irrResult.refiDetail.year} Refinance：届时市值 ${fmt(irrResult.refiDetail.marketValueAtRefi)} × ${assumptions.refiLTVPct}% = 新贷款 ${fmt(irrResult.refiDetail.newLoanAmt)}（利率 ${assumptions.refiRatePct}%），还清原贷款余额 ${fmt(irrResult.refiDetail.oldBalance)}，扣除手续费 ${fmt(irrResult.refiDetail.refiCosts)} 后净得现金 ${fmt(irrResult.refiDetail.refiCashOut)}（不算收入，免税）。此后 PITI 按新贷款重算。
+            </div>
+            ` : ''}
             <div style="font-size:10.5px; color:var(--slate); margin-top:6px; font-family:'IBM Plex Mono',monospace;">
               现金流按租金×${coverageRatio.toFixed(2)}计算（与上方达标线口径一致，扣除空置/维护缓冲），不是满租全额。Year 1 折旧扣除 ${fmt(irrResult.deprecYear1)}（含 Bonus ${fmt(irrResult.bonusDeprecYear1)}）× 边际税率 ${assumptions.marginalTaxPct}% 计入税后现金流。账面权益 = 市值（房价+${assumptions.appreciationPct}%/年）− 剩余贷款，未扣卖出成本（不卖假设）。Cost Seg / Bonus 比例为估算值，仅供规划参考，请与 CPA 核实实际当年比例与真实 study 结果。
             </div>
