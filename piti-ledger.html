@@ -381,8 +381,8 @@
       <div class="field full"><label>年租金增长率：<b id="a-rent-growth-val">3.0</b>%</label>
         <input type="range" id="a-rent-growth" min="-5" max="10" step="0.5" value="3" style="width:100%;">
       </div>
-      <div class="field full"><label>年房价增值率（不卖，仅按市值折算权益）：<b id="a-appreciation-val">3.0</b>%</label>
-        <input type="range" id="a-appreciation" min="-5" max="10" step="0.5" value="3" style="width:100%;">
+      <div class="field full"><label>年房价增值率（不卖，仅按市值折算权益）：<b id="a-appreciation-val">1.0</b>%</label>
+        <input type="range" id="a-appreciation" min="-5" max="10" step="0.5" value="1" style="width:100%;">
       </div>
       <div class="field"><label>买入成本 %（过户费等）</label><input type="number" id="a-buy-cost" value="2" step="0.5"></div>
       <div class="field"><label>边际税率 %（用于折旧抵税）</label><input type="number" id="a-tax-rate" value="32" step="1"></div>
@@ -522,7 +522,7 @@
   }
   let properties = [];
   let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7,
-    holdYears:10, rentGrowthPct:3, appreciationPct:3, buyCostPct:2,
+    holdYears:10, rentGrowthPct:3, appreciationPct:1, buyCostPct:2,
     marginalTaxPct:32, landValuePct:20, costSegPct:25, bonusDeprecPct:60,
     refiYear:0, refiLTVPct:75, refiRatePct:6.5, refiCostPct:2};
   let editingId = null;
