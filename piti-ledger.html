@@ -371,6 +371,11 @@
       <div class="field"><label>房产税率 %/年</label><input type="number" id="a-tax" value="0.65" step="0.01"></div>
       <div class="field"><label>保险 %/年（按房价）</label><input type="number" id="a-ins" value="0.35" step="0.01"></div>
       <div class="field"><label>HOA 月费 $</label><input type="number" id="a-hoa" value="0" step="5"></div>
+      <div class="field"><label>IRR 持有年限（年）</label><input type="number" id="a-hold-years" value="5" step="1"></div>
+      <div class="field"><label>IRR 年租金增长率 %</label><input type="number" id="a-rent-growth" value="3" step="0.5"></div>
+      <div class="field"><label>IRR 年房价增值率 %</label><input type="number" id="a-appreciation" value="3" step="0.5"></div>
+      <div class="field"><label>IRR 卖出成本 %（佣金+过户费）</label><input type="number" id="a-sell-cost" value="7" step="0.5"></div>
+      <div class="field"><label>IRR 买入成本 %（过户费等）</label><input type="number" id="a-buy-cost" value="2" step="0.5"></div>
       <div class="field"><label>RentCast API Key</label><input type="password" id="a-rentcast-key" placeholder="用于 Zillow 链接自动填充" autocomplete="off"></div>
       <div class="field"><label>Anthropic API Key</label><input type="password" id="a-anthropic-key" placeholder="用于照片装修分析（付费）" autocomplete="off"></div>
       <div class="field"><label>Google Gemini API Key（免费）</label><input type="password" id="a-gemini-key" placeholder="免费替代方案，见 aistudio.google.com" autocomplete="off"></div>
@@ -499,7 +504,8 @@
     return mult;
   }
   let properties = [];
-  let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7};
+  let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7,
+    holdYears:5, rentGrowthPct:3, appreciationPct:3, sellCostPct:7, buyCostPct:2};
   let editingId = null;
   let coverageRatio = 0.7;
 
@@ -571,6 +577,11 @@
     $('a-tax').value = assumptions.tax;
     $('a-ins').value = assumptions.ins;
     $('a-hoa').value = assumptions.hoa;
+    $('a-hold-years').value = assumptions.holdYears;
+    $('a-rent-growth').value = assumptions.rentGrowthPct;
+    $('a-appreciation').value = assumptions.appreciationPct;
+    $('a-sell-cost').value = assumptions.sellCostPct;
+    $('a-buy-cost').value = assumptions.buyCostPct;
     $('a-rentcast-key').value = assumptions.rentcastKey || '';
     $('a-anthropic-key').value = assumptions.anthropicKey || '';
     $('a-gemini-key').value = assumptions.geminiKey || '';
@@ -583,17 +594,21 @@
       p.style.color = active ? '#fff' : '';
     });
   }
-  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
+  ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-hold-years','a-rent-growth','a-appreciation','a-sell-cost','a-buy-cost','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
     $(id).addEventListener('change', ()=>{
       assumptions = {
         down:+$('a-down').value, rate:+$('a-rate').value, term:+$('a-term').value,
         tax:+$('a-tax').value, ins:+$('a-ins').value, hoa:+$('a-hoa').value,
+        holdYears:+$('a-hold-years').value, rentGrowthPct:+$('a-rent-growth').value,
+        appreciationPct:+$('a-appreciation').value, sellCostPct:+$('a-sell-cost').value,
+        buyCostPct:+$('a-buy-cost').value,
         rentcastKey:$('a-rentcast-key').value.trim(),
         anthropicKey:$('a-anthropic-key').value.trim(),
         geminiKey:$('a-gemini-key').value.trim(),
         coverageRatio
       };
       saveAssumptions();
+      render();
     });
   });
   // Coverage ratio pills
@@ -1240,6 +1255,74 @@
     return (threshold - hoa - taxFixed) / slope;
   }
 
+  // Solve for the annual IRR of a cash flow series (cashflows[0] = year-0
+  // outlay, cashflows[1..N] = subsequent years) by bisection on NPV(r) = 0.
+  // Real estate cash flow series here are well-behaved (one negative outlay
+  // followed by positive years), so a wide bisection bracket is reliable
+  // without needing Newton's method or derivative handling.
+  function solveIRR(cashflows){
+    const npv = rate => cashflows.reduce((sum, cf, t) => sum + cf / Math.pow(1 + rate, t), 0);
+    let lo = -0.99, hi = 5;
+    let nLo = npv(lo), nHi = npv(hi);
+    if(!isFinite(nLo) || !isFinite(nHi) || nLo * nHi > 0) return null;
+    for(let i = 0; i < 100; i++){
+      const mid = (lo + hi) / 2;
+      const nMid = npv(mid);
+      if(Math.abs(nMid) < 0.5) return mid;
+      if((nLo < 0) === (nMid < 0)){ lo = mid; nLo = nMid; }
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  // Projects a simple annual cash-flow series over a holding period and
+  // solves for IRR: year-0 outlay is down payment + buy costs; each
+  // subsequent year's cash flow is (rent - PITI) with rent grown at
+  // rentGrowthPct/yr (PITI held flat — P&I is fixed by the loan, and this
+  // keeps tax/insurance drift as a known simplification rather than an
+  // invented assumption); the final year adds net sale proceeds (price
+  // appreciated at appreciationPct/yr, minus sell costs and the mortgage's
+  // remaining balance at that point, via the standard amortization formula).
+  // Deliberately excludes vacancy/maintenance/capex reserves -- this uses
+  // the exact same "rent - PITI" cash flow already shown elsewhere on the
+  // card (the margin figure), just projected forward and combined with a
+  // sale, rather than introducing a new unexplained expense assumption.
+  function estimateIRR(p, rentTotal){
+    if(!rentTotal) return null;
+    const years = assumptions.holdYears || 5;
+    const rentGrowth = (assumptions.rentGrowthPct || 0) / 100;
+    const apprRate = (assumptions.appreciationPct || 0) / 100;
+    const sellCostPct = (assumptions.sellCostPct || 0) / 100;
+    const buyCostPct = (assumptions.buyCostPct || 0) / 100;
+
+    const piti = calcPITI(p);
+    const down = p.price * p.down / 100;
+    const buyCosts = p.price * buyCostPct;
+    const loan = p.price * (1 - p.down / 100);
+    const r = p.rate / 100 / 12;
+    const nTotalMonths = p.term * 12;
+    const annualPITI = piti.total * 12;
+
+    const cashflows = [-(down + buyCosts)];
+    let annualRent = rentTotal * 12;
+    for(let yr = 1; yr <= years; yr++){
+      let cf = annualRent - annualPITI;
+      if(yr === years){
+        const salePrice = p.price * Math.pow(1 + apprRate, years);
+        const sellCosts = salePrice * sellCostPct;
+        const monthsElapsed = years * 12;
+        let remainingBalance;
+        if(r === 0) remainingBalance = loan * (1 - monthsElapsed / nTotalMonths);
+        else remainingBalance = loan * (Math.pow(1+r, nTotalMonths) - Math.pow(1+r, monthsElapsed)) / (Math.pow(1+r, nTotalMonths) - 1);
+        remainingBalance = Math.max(0, remainingBalance);
+        cf += salePrice - sellCosts - remainingBalance;
+      }
+      cashflows.push(cf);
+      annualRent *= (1 + rentGrowth);
+    }
+    return { irr: solveIRR(cashflows), years, cashflows };
+  }
+
   // Multi-family: per-unit-layout rent estimation using ZORI lookup table.
   // Each unit layout gets its own base rent (ZIP × bed multiplier), own adjustment
   // percentage, then total = sum(count × adjusted rent per layout).
@@ -1326,6 +1409,7 @@
     const pass = threshold >= piti.total && rent.total > 0;
     const margin = threshold - piti.total;
     const suggested = suggestedMaxPrice(p, rent.total, coverageRatio);
+    const irrResult = estimateIRR(p, rent.total);
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -1394,6 +1478,12 @@
             <div class="cap">租金×${coverageRatio.toFixed(2)} − PITI</div>
             <div class="big">${margin>=0?'+':''}${fmt(margin)} /月</div>
           </div>
+          ${irrResult && irrResult.irr != null ? `
+          <div class="margin-box" style="margin-top:8px; background:var(--accent-bg); color:var(--accent); border-color:rgba(8,145,178,0.2);">
+            <div class="cap">预计 IRR（持有 ${irrResult.years} 年，租金+${assumptions.rentGrowthPct}%/年、房价+${assumptions.appreciationPct}%/年，卖出成本 ${assumptions.sellCostPct}%）</div>
+            <div class="big">${(irrResult.irr*100).toFixed(1)}%</div>
+          </div>
+          ` : ''}
           <div style="margin-top:10px;">
             ${(p.imageUrls&&p.imageUrls.length) ? `
               <div class="card-images">
