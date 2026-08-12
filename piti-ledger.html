@@ -397,12 +397,15 @@
       <div class="field"><label>RentCast API Key</label><input type="password" id="a-rentcast-key" placeholder="用于 Zillow 链接自动填充" autocomplete="off"></div>
       <div class="field"><label>Anthropic API Key</label><input type="password" id="a-anthropic-key" placeholder="用于照片装修分析（付费）" autocomplete="off"></div>
       <div class="field"><label>Google Gemini API Key（免费）</label><input type="password" id="a-gemini-key" placeholder="免费替代方案，见 aistudio.google.com" autocomplete="off"></div>
+      <div class="field full"><label>GitHub PAT（跨设备同步用，仅需勾选此仓库的 Contents 读写权限）</label><input type="password" id="a-github-pat" placeholder="github.com/settings/personal-access-tokens/new" autocomplete="off"></div>
     </div>
   </details>
 
   <div class="add-row">
     <button id="btn-add" class="brass">+ 新增房源</button>
     <button id="btn-copy" class="ghost">复制达标房源清单（可粘贴到邮件）</button>
+    <button id="btn-sync-now" class="ghost">同步</button>
+    <span id="sync-status" style="font-size:11px; color:var(--slate); margin-left:4px;"></span>
   </div>
 
   <div id="form-slot"></div>
@@ -522,12 +525,98 @@
     return mult;
   }
   let properties = [];
-  let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', coverageRatio:0.7,
+  let assumptions = {down:25, rate:7.0, term:30, tax:0.65, ins:0.35, hoa:0, rentcastKey:'', anthropicKey:'', geminiKey:'', githubPat:'', coverageRatio:0.7,
     holdYears:10, rentGrowthPct:3, appreciationPct:1, buyCostPct:2,
     marginalTaxPct:32, landValuePct:20, costSegPct:25, bonusDeprecPct:60,
     refiYear:0, refiLTVPct:75, refiRatePct:6.5, refiCostPct:2};
   let editingId = null;
   let coverageRatio = 0.7;
+
+  // ---------- GitHub sync (cross-device) ----------
+  // Uses this same repo as the datastore: properties-data.json holds the
+  // full properties array. Each browser keeps its own PAT (never committed)
+  // in localStorage, same pattern as the other API keys above. Merge is
+  // last-writer-wins per property id via updatedAt -- no delete tombstones,
+  // so a deletion may resurrect if the other device pushes a stale local
+  // copy before pulling. Acceptable tradeoff for a single-user, two-device
+  // personal tool; not safe for concurrent multi-user editing.
+  const GH_OWNER = 'tangying100-maker';
+  const GH_REPO = 'piti-ledger';
+  const GH_DATA_PATH = 'properties-data.json';
+  let githubFileSha = null;
+  let syncDebounceTimer = null;
+
+  function setSyncStatus(msg){
+    const el = $('sync-status');
+    if(el) el.textContent = msg;
+  }
+  function mergeProperties(local, remote){
+    const map = new Map();
+    for(const p of local) map.set(p.id, p);
+    for(const r of remote){
+      const l = map.get(r.id);
+      if(!l || (r.updatedAt||0) > (l.updatedAt||0)) map.set(r.id, r);
+    }
+    return [...map.values()];
+  }
+  async function githubPull(){
+    if(!assumptions.githubPat) return null;
+    try{
+      const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_DATA_PATH}`, {
+        headers:{ 'Authorization':`Bearer ${assumptions.githubPat}`, 'Accept':'application/vnd.github+json' }
+      });
+      if(res.status===404){ githubFileSha=null; return {properties:[]}; }
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      githubFileSha = data.sha;
+      const json = decodeURIComponent(escape(atob(data.content.replace(/\n/g,''))));
+      return JSON.parse(json);
+    }catch(e){
+      console.error(e);
+      setSyncStatus('⚠ 拉取失败：'+e.message);
+      return null;
+    }
+  }
+  async function githubPush(retrying){
+    if(!assumptions.githubPat) return;
+    try{
+      const payload = JSON.stringify({properties}, null, 2);
+      const contentB64 = btoa(unescape(encodeURIComponent(payload)));
+      const body = { message:`Sync ${properties.length} listings — ${new Date().toISOString()}`, content: contentB64 };
+      if(githubFileSha) body.sha = githubFileSha;
+      const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_DATA_PATH}`, {
+        method:'PUT',
+        headers:{ 'Authorization':`Bearer ${assumptions.githubPat}`, 'Accept':'application/vnd.github+json', 'Content-Type':'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(res.status===409 && !retrying){
+        const remote = await githubPull();
+        if(remote) properties = mergeProperties(properties, remote.properties||[]);
+        saveProperties(true);
+        return githubPush(true);
+      }
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      githubFileSha = data.content.sha;
+      setSyncStatus('✓ 已同步 '+new Date().toLocaleTimeString('zh-CN',{hour12:false}));
+    }catch(e){
+      console.error(e);
+      setSyncStatus('⚠ 同步失败：'+e.message);
+    }
+  }
+  function scheduleSync(){
+    if(!assumptions.githubPat) return;
+    clearTimeout(syncDebounceTimer);
+    setSyncStatus('同步中…');
+    syncDebounceTimer = setTimeout(()=>githubPush(false), 1500);
+  }
+  async function syncNow(){
+    if(!assumptions.githubPat){ toast('请先在设置里填 GitHub PAT'); return; }
+    setSyncStatus('同步中…');
+    const remote = await githubPull();
+    if(remote){ properties = mergeProperties(properties, remote.properties||[]); saveProperties(true); render(); }
+    await githubPush(false);
+  }
 
   function toast(msg){
     const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -584,17 +673,27 @@
         photosChanged = true;
       }
     }
-    if(photosChanged) saveProperties();
+    if(photosChanged) saveProperties(true);
     hydrateAssumptionFields();
+    if(assumptions.githubPat){
+      setSyncStatus('同步中…');
+      const remote = await githubPull();
+      if(remote){
+        properties = mergeProperties(properties, remote.properties||[]);
+        try{ localStorage.setItem('piti-properties', JSON.stringify(properties)); }catch(e){}
+      }
+      scheduleSync();
+    }
     render();
   }
   async function saveAssumptions(){
     try{ localStorage.setItem('piti-assumptions', JSON.stringify(assumptions)); }
     catch(e){ console.error(e); toast('假设参数保存失败'); }
   }
-  async function saveProperties(){
+  async function saveProperties(skipSync){
     try{ localStorage.setItem('piti-properties', JSON.stringify(properties)); }
     catch(e){ console.error(e); toast('保存失败，请重试'); }
+    if(!skipSync) scheduleSync();
   }
   function hydrateAssumptionFields(){
     $('a-down').value = assumptions.down;
@@ -620,6 +719,7 @@
     $('a-rentcast-key').value = assumptions.rentcastKey || '';
     $('a-anthropic-key').value = assumptions.anthropicKey || '';
     $('a-gemini-key').value = assumptions.geminiKey || '';
+    $('a-github-pat').value = assumptions.githubPat || '';
     // Update coverage ratio display
     $('ratio-display').innerHTML = `<b>${coverageRatio.toFixed(2)}</b>`;
     $('ratio-custom').value = [0.7,0.75,0.8].includes(coverageRatio) ? '' : coverageRatio;
@@ -643,6 +743,7 @@
       rentcastKey:$('a-rentcast-key').value.trim(),
       anthropicKey:$('a-anthropic-key').value.trim(),
       geminiKey:$('a-gemini-key').value.trim(),
+      githubPat:$('a-github-pat').value.trim(),
       coverageRatio
     };
     saveAssumptions();
@@ -651,6 +752,11 @@
   ['a-down','a-rate','a-term','a-tax','a-ins','a-hoa','a-hold-years','a-buy-cost','a-tax-rate','a-land-pct','a-costseg-pct','a-bonus-pct','a-refi-year','a-refi-ltv','a-refi-rate','a-refi-cost','a-rentcast-key','a-anthropic-key','a-gemini-key'].forEach(id=>{
     $(id).addEventListener('change', rebuildAssumptionsFromFields);
   });
+  $('a-github-pat').addEventListener('change', async ()=>{
+    rebuildAssumptionsFromFields();
+    if(assumptions.githubPat) await syncNow();
+  });
+  $('btn-sync-now').addEventListener('click', syncNow);
   // Rent growth / appreciation are sliders -- use 'input' so dragging gives
   // live feedback (both the % label next to the slider and every card's
   // numbers update continuously), not just on release.
@@ -1670,6 +1776,7 @@
       pill.addEventListener('click', ()=>{
         p.tier = pill.dataset.tier;
         p.rentAdjustPct = p.tier==='old' ? -5 : p.tier==='new' ? 12 : 0;
+        p.updatedAt = Date.now();
         saveProperties(); render();
       });
     });
@@ -2366,7 +2473,7 @@
       else if(units > 1) propertyType = 'multifamily';
 
       const np = {
-        id:p.id, createdAt:p.createdAt,
+        id:p.id, createdAt:p.createdAt, updatedAt: Date.now(),
         address:$('f-address').value.trim(), city:$('f-city').value, zip:$('f-zip').value.trim(),
         propType:propTypeField, propertyType,
         homeType:p.homeType || (propertyType === 'multifamily' ? 'multifamily' : 'single_family'),
